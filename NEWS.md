@@ -6,5 +6,3 @@
 * `method = "sweetnet"` optionally computes 128-dimensional pretrained CPU embeddings with verified weights, a fixed model encoder, and explicit input restrictions. Inference runs entirely in R with the optional torch runtime; no Python is required. The optional torch runtime is never installed automatically.
 * `method = "sweetnet"` now defaults to SweetNet v2, with legacy weights available through `checkpoint = "sweetnet-v1"`. Encoders record their model identity; outputs from different model versions must not be combined.
 * Named checkpoints download from pinned official sources on first use, verify SHA-256, and reuse a per-user cache. `download = FALSE` supports offline use, and `checkpoint` still accepts verified local files.
-
-* Adds an internal GlycanGT inference kernel with deterministic graph identifiers and numerical regression tests. Pretrained GlycanGT is not yet exposed through the public API; its checkpoint still requires access and validation.

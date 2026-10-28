@@ -1,0 +1,15 @@
+.Rproj.user
+.Rhistory
+.RData
+.DS_Store
+*.Rcheck
+*.tar.gz
+docs/
+doc/
+Meta/
+
+.venv*/
+__pycache__/
+*.pyc
+*.pt
+*.pth

@@ -1,0 +1,11 @@
+^glyfp\.Rproj$
+^\.Rproj\.user$
+^LICENSE\.md$
+^README\.Rmd$
+^\.github$
+^_pkgdown\.yml$
+^data-raw$
+^dev$
+^docs$
+^\.git$
+^\.gitignore$

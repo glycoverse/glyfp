@@ -29,6 +29,10 @@ sweetnet_cache_dir <- function(path) {
   normalizePath(path, mustWork = FALSE)
 }
 
+sweetnet_create_cache <- function(path) {
+  dir.create(path, recursive = TRUE, showWarnings = FALSE)
+}
+
 sweetnet_download <- function(url, destfile) {
   old <- options(timeout = max(120, getOption("timeout", 60)))
   on.exit(options(old), add = TRUE)
@@ -102,7 +106,8 @@ sweetnet_resolve <- function(checkpoint, cache_dir, download) {
   }
   if (
     !dir.exists(cache_dir) &&
-      !dir.create(cache_dir, recursive = TRUE, showWarnings = FALSE)
+      !sweetnet_create_cache(cache_dir) &&
+      !dir.exists(cache_dir)
   ) {
     cli::cli_abort(
       "Cannot create checkpoint cache {.file {cache_dir}}.",

@@ -147,3 +147,20 @@ test_that("checkpoint options and cache failures are explicit", {
     class = "glyfp_error_cache"
   )
 })
+
+test_that("concurrent first directory creation is accepted", {
+  fake <- fake_checkpoint_cache()
+  on.exit(unlink(fake$dir, recursive = TRUE), add = TRUE)
+  local_mocked_bindings(
+    sweetnet_create_cache = function(path) {
+      dir.create(path)
+      FALSE # another process created it between the existence check and mkdir
+    },
+    sweetnet_download = function(url, destfile) {
+      writeBin(fake$payload, destfile)
+      0L
+    }
+  )
+  result <- suppressMessages(sweetnet_resolve("sweetnet-v2", fake$dir, TRUE))
+  expect_identical(sweetnet_sha256(result$path), fake$hash)
+})

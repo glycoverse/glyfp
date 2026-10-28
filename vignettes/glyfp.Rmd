@@ -108,143 +108,139 @@ unlink(path)
 
 SweetNet is a graph neural network introduced by
 [Burkholz, Quackenbush and Bojar (2021)](https://doi.org/10.1016/j.celrep.2021.109251).
-This optional method uses the **legacy glycowork 1.9.0 species checkpoint** and
-returns its 128-dimensional hidden representation. It does not train a model.
+The optional `sweetnet` method runs entirely in R with torch. Binary/count
+methods do not load torch or require its runtime.
 
-SweetNet runs entirely in R with the optional torch package. Binary/count
-methods neither load torch nor require its runtime. The native implementation
-uses the authors' vocabulary and reproduces three additive graph-convolution
-layers, mean pooling, and the two linear/batch-normalization layers that produce
-the pretrained readout. No Python installation is needed.
+### Setup and first use
 
-### Configure the optional environment
-
-Install the optional R packages and the official torch runtime explicitly:
+Install the optional R packages and runtime once:
 
 ```{r, eval=FALSE}
 install.packages(c("torch", "digest", "zip"))
 torch::install_torch()
 ```
 
-The implementation was tested with R torch 0.17.0 and LibTorch 2.8.0 on CPU.
-The package does not install dependencies or download model weights during
-fitting or transformation.
+Then call the same fingerprint API. **No checkpoint environment variable or
+manual weight download is required.** The first call downloads the official
+SweetNet v2 weights (about 3.82 MB), verifies their SHA-256, and saves them in
+your user cache. Later calls reuse the verified file.
 
-Obtain the [official legacy checkpoint](https://huggingface.co/DBojar/glycowork_models/blob/0a3981df888532e52b4c2d910bfb56b5a45ad955/glycowork_sweetnet_species.pt)
-from the authors' public MIT-licensed model repository and save it locally.
-It is about 3.29 MB. Its SHA-256 must be:
-
-```text
-4ee19fc0593db0562c16585b556050694144816754750ebfe1876ed21ba0f4be
+```{r, include=FALSE}
+# Maintainer-only switch: documentation builds normally run without model downloads.
+run_sweetnet <- identical(Sys.getenv("GLYFP_RUN_MODEL_EXAMPLES"), "true")
 ```
 
-SweetNet v2 weights are incompatible with this method. The legacy archive is a
-PyTorch state dictionary with CUDA device tags, rather than a TorchScript model.
-R torch's `load_state_dict()` lacks a `map_location` argument. For this one
-hash-verified archive, glyfp changes its 26 storage-device tags to CPU in a
-temporary copy, then loads it natively. The tensor storage bytes and original
-file are unchanged. This is a fixed-artifact loader, not a general `.pt`
-converter. Different or partial weights are rejected before deserialization;
-there is no random-weight fallback.
-
-### Use the same three functions
-
-Set `GLYFP_SWEETNET_CHECKPOINT` to the local official weight file for this example,
-or pass its path directly to `fit_fingerprint()` or `glycan_fingerprint()`.
-
-```{r}
-library(glyfp)
-weights <- Sys.getenv("GLYFP_SWEETNET_CHECKPOINT")
-configured <- nzchar(weights) && file.exists(weights) &&
-  requireNamespace("torch", quietly = TRUE) && torch::torch_is_installed()
-
-if (configured) {
-  a <- c("Gal(b1-4)GlcNAc", "GlcNAc", NA_character_)
-  b <- "Man(a1-3)[Man(a1-6)]Man"
-  encoder <- fit_fingerprint(
-    a, method = "sweetnet", checkpoint = weights
-  )
-  fp_a <- transform_fingerprint(a, encoder)
-  fp_b <- transform_fingerprint(b, encoder)
-  stopifnot(length(fp_a) == length(a), all(lengths(fp_a) == 128L))
-  stopifnot(all(is.na(fp_a[[3]])))
-  stopifnot(identical(names(fp_a[[1]]), names(fp_b[[1]])))
-}
+```{r, eval=run_sweetnet}
+fp <- glycan_fingerprint(c("Gal(b1-4)GlcNAc", "GlcNAc"), "sweetnet")
+lengths(fp)
 ```
 
-The result is a simple list of named double vectors. Coordinates are
-`sweetnet_001` through `sweetnet_128`; they are learned features, not motif names.
-The top-level convenience function still performs fit then transform:
+The default cache location is `tools::R_user_dir("glyfp", "cache")`. Use
+`cache_dir` when a different location is needed. No network request occurs when
+loading glyfp or using the structural methods. The package does not install the
+torch runtime automatically.
 
-```{r}
-if (configured) {
-  fp <- glycan_fingerprint(
-    "Gal(b1-4)GlcNAc", "sweetnet", checkpoint = weights
-  )
-  stopifnot(identical(fp[[1]], fp_a[[1]]))
-}
+### Choose a checkpoint
+
+| `checkpoint` | Model | Representation |
+|---|---|---|
+| `"sweetnet-v2"` (default) | Current glycowork species model | Residual graph layers with BatchNorm; mean and max pooling |
+| `"sweetnet-v1"` | Legacy glycowork 1.9.0 species model | Three graph layers; mean pooling |
+| A local `.pt` path | Either of the two official models, identified by hash | Uses the corresponding architecture |
+
+Both models produce 128 learned coordinates. **v1 and v2 define different
+coordinate spaces and must not be mixed**, despite sharing vector lengths and
+coordinate names. The v2 default follows the current upstream pretrained model;
+it does not imply better accuracy for every downstream task.
+
+```{r, eval=run_sweetnet}
+a <- c("Gal(b1-4)GlcNAc", "GlcNAc", NA_character_)
+b <- "Man(a1-3)[Man(a1-6)]Man"
+encoder <- fit_fingerprint(a, "sweetnet", checkpoint = "sweetnet-v2")
+fp_a <- transform_fingerprint(a, encoder)
+fp_b <- transform_fingerprint(b, encoder)
+stopifnot(all(lengths(fp_a) == 128L), all(is.na(fp_a[[3]])))
+stopifnot(identical(names(fp_a[[1]]), names(fp_b[[1]])))
+encoder$params$model$model
+
+legacy <- fit_fingerprint(a, "sweetnet", checkpoint = "sweetnet-v1")
+stopifnot(!identical(encoder$params$model, legacy$params$model))
 ```
 
-Fit binds the pretrained model, vocabulary and preprocessing to the encoder,
-validating the training inputs without updating any weights. Empty/all-NA fitting
-still produces 128 coordinates. An empty transform returns `list()`; an NA input
-returns 128 `NA_real_` values. `na_action = "error"` rejects NA.
+Fitting binds the fixed model, vocabulary and preprocessing; it does not train or
+update weights. Empty/all-NA fitting still defines 128 coordinates. Missing
+inputs yield 128 `NA_real_` values unless `na_action = "error"`.
 
-### Supported chemistry and unknown tokens
+### Offline use and local files
 
-Text is first parsed by glyparse, just as for the structural methods. Text and
-equivalent glyrepr objects therefore use the same preprocessing.
+After the first download, `download = FALSE` requires the cached checkpoint and
+prevents network access. The encoder preserves that policy for future transforms.
 
-glyrepr adds an unknown reducing-end annotation, such as `(?1-` for GlcNAc or
-`(?2-` for Neu5Ac, when no reducing-end anomer is provided. SweetNet's input
-dialect omits this annotation. glyfp removes it **only** when the anomer is
-unknown and the carbon position equals glyrepr's normal inferred position for
-that residue. Explicit unknown annotations with the same meaning are accepted.
+```{r, eval=run_sweetnet}
+offline <- fit_fingerprint(a, "sweetnet", download = FALSE)
+stopifnot(identical(transform_fingerprint(a, offline), fp_a))
+```
 
-An explicit alpha/beta reducing-end annotation, another half-linkage position,
-or an ambiguous internal linkage is rejected. These restrictions avoid silently
-discarding specified chemistry. Floating parts/substituents and alditols remain
-unsupported. A token must exist in the fixed pretrained vocabulary, and the
-directed labeled residue/linkage graph is built directly from glyrepr.
-Numerical validation independently checked this graph against glycowork's parser. Unsupported modifications cannot silently become an
-unknown embedding.
+Alternatively, pass a verified local file. Its contents determine which model is
+loaded, regardless of its filename. It is never copied into the cache, replaced,
+or downloaded. Arbitrary `.pt` models and altered weights are rejected.
 
-For SweetNet, `unknown = "error"` is both the default and the only supported
-policy. `"ignore"` and `"warn"` are rejected. `max_size` applies only to the
-structural methods and cannot be supplied for SweetNet.
+```{r, eval=FALSE}
+encoder <- fit_fingerprint(
+  a, "sweetnet", checkpoint = "/path/to/glycowork_sweetnet_species_v2.pt",
+  download = FALSE
+)
+```
+
+Downloads go to a temporary file in the cache directory. Only a complete file
+matching the fixed SHA-256 is renamed into place. A failed download leaves no
+partial checkpoint for a later call to mistake for a valid model. A corrupt
+existing cache entry produces an error naming the file: remove that file to
+allow a fresh download, or supply a verified local path. Offline cache misses
+produce an explicit error and make no network request.
+
+The pinned official artifacts are:
+
+- [SweetNet v2](https://huggingface.co/DBojar/glycowork_models/blob/52187c054b9c988ddb2a5a5af9ee64b51004fd1e/glycowork_sweetnet_species_v2.pt),
+  SHA-256 `bc3d901e4284554c1a245b8e6b7e291a5631c8932ca9c27eb8668b6d4424a146`.
+- [Legacy SweetNet](https://huggingface.co/DBojar/glycowork_models/blob/0a3981df888532e52b4c2d910bfb56b5a45ad955/glycowork_sweetnet_species.pt),
+  SHA-256 `4ee19fc0593db0562c16585b556050694144816754750ebfe1876ed21ba0f4be`.
+
+The authors' model repository is public and MIT licensed. The fixed revision and
+hash prevent an upstream replacement from silently changing an encoder's model.
+
+### Supported chemistry
+
+Text parsing is delegated to glyparse; equivalent glyrepr objects use the same
+graph construction. An unknown reducing-end annotation at the residue's normal
+inferred carbon position, such as `(?1-` for GlcNAc or `(?2-` for Neu5Ac, is omitted
+from the model graph. Explicit alpha/beta half-linkages, other reducing-end
+positions and ambiguous internal linkages are rejected so specified chemistry
+is not silently discarded. Floating parts/substituents and alditols remain
+unsupported.
+
+Every residue/substituent/linkage token must be in the fixed pretrained
+vocabulary. `unknown = "error"` is the only supported SweetNet policy; tokens
+are never assigned untrained representations. `max_size` applies only to the
+structural methods.
 
 ### Reproducibility and persistence
 
-The encoder records checkpoint and vocabulary SHA-256, model identity, R
-preprocessing/inference hashes, R package versions, readout, CPU
-device and batch size. Every transform validates these records and local files,
-including transforms of empty input. No weights are downloaded during fitting
-or transformation.
+The encoder records model version, official source revision, weight and
+vocabulary hashes, R implementation hashes, package versions, readout, CPU device
+and batch size. Every transform validates these records, including empty input.
+Use `saveRDS()` and `readRDS()` to retain the encoder, and keep it with any exported
+vectors. Local paths must remain accessible. Named models can be downloaded
+again after cache removal only when the encoder's download policy permits it.
 
-The readout is `bn2(lin2(...))`, before the second activation, dropout and
-classifier. Inference uses frozen normalization, no gradients, no dropout and
-one graph per inference, preserving the caller's torch thread settings.
-This makes caller batch composition irrelevant to the calculation on the same
-environment. Allow numerical tolerance across hardware, thread settings and
-LibTorch builds: their full binary identity is not recorded in the encoder.
-Validation checks all 128 coordinates for 19 diverse glycans against the authors'
-Python implementation, with a maximum absolute coordinate error below 1e-5.
+Both readouts are `bn2(lin2(...))`, before the final activation, dropout and
+classifier. Evaluation uses CPU float32, frozen normalization, no gradients or
+dropout, and one graph at a time. Caller thread settings and the native backend's
+R RNG state are preserved. Runtime binary and hardware identity are not fully
+recorded, so comparisons across environments should allow floating-point
+tolerance. Model upgrades require refitting and recomputing all compared batches.
 
-Save the encoder with `saveRDS()`. It contains ordinary R data and local paths,
-not a live model. Reusing it requires the recorded environment and files at the
-recorded paths. Changing an upstream version or preprocessing implementation
-requires refitting and recomputing batches. Separate SweetNet fits are comparable
-only when their model metadata match; sharing one encoder is the easiest rule.
-
-Structural fingerprints still learn their dictionary from each fitting batch:
-independent structural calls cannot be compared even when vector lengths match.
-
-### Development integration test
-
-The normal R tests require no model download. To run the actual pretrained
-integration tests, configure `GLYFP_TEST_CHECKPOINT` before
-`devtools::test()` or `R CMD check`. The test compares against independent
-upstream reference values and checks object/text parity, order, duplicates,
-single-vs-multiple input, serialization, missing values, empty fitting, unknown
-tokens and tampered metadata/weights. Without that variable, the optional
-pretrained integration tests are explicitly skipped.
+Ordinary tests mock network calls. Real pretrained integration tests use local
+files specified by developer-only `GLYFP_TEST_CHECKPOINT` (v1) and
+`GLYFP_TEST_V2_CHECKPOINT` (v2), comparing all 128 coordinates with independent
+upstream reference values at maximum absolute error below `1e-5`.

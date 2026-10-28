@@ -14,7 +14,7 @@
 - `R CMD build glyfp`: **OK**, including vignette construction.
 - `R CMD check glyfp_0.0.0.9000.tar.gz`: **Status: OK**. Installation, examples,
   installed-package tests, vignette rebuild and PDF manual passed.
-- Both workflow YAML files parsed. GitHub's `on` key is YAML 1.1 boolean TRUE in
+- All five workflow YAML files parsed. GitHub's `on` key is YAML 1.1 boolean TRUE in
   R's yaml parser; this is expected and not a GitHub Actions syntax failure.
 - SVG rendered with librsvg; the final 424 x 489 transparent PNG was visually
   inspected. Earlier ImageMagick SVG rendering had missing strokes/text and was
@@ -85,3 +85,17 @@ upstream numerical references, and rejection of unknown tokens, altered metadata
 and incorrect weights. Independent read-only review found no substantive issue.
 The final R CMD check for this Python-bridge implementation completed with Status:
 OK and PASS 147; it is the baseline for the subsequently requested native R port.
+
+README was compared directly with glyenzy and glyanno and regenerated with the
+matching headings: Installation, Documentation, Role in `glycoverse`, Example.
+The logo remains under man/figures; the obsolete data-raw/logo.md was removed.
+
+CI now includes R-CMD-check, coverage, pkgdown preview artifacts, Air formatting,
+and generated-documentation checks. All jobs use contents: read and none deploy
+or write back to pull requests. Local Air and roxygen freshness checks passed.
+A clean pkgdown preview build completed successfully with both articles and the
+function reference. The preview includes linked source documentation from the
+README. A missing canonical-URL notice is expected until a real repository/site
+exists; no URL is invented. The sidebar is disabled for this unpublished preview
+to avoid CRAN/Bioconductor status requests. Existing local favicon assets are
+reused; CI checks for them before building. No further logo upload occurred.

@@ -12,3 +12,14 @@ articles:
   contents:
   - fingerprints
   - sweetnet
+
+# No canonical URL yet: this configuration builds local/CI preview artifacts.
+# Add the verified site URL only after a repository and deployment exist.
+navbar:
+  structure:
+    left: [intro, reference, articles, news]
+    right: [search]
+
+# Preview-only package: avoid CRAN/Bioconductor status lookups.
+home:
+  sidebar: false

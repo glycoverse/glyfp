@@ -32,3 +32,13 @@ jobs:
         with:
           name: test-coverage
           path: coverage.xml
+      - name: Save coverage failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-failure
+          path: |
+            *.Rcheck
+            **/testthat.Rout*
+            **/testthat/testthat-problems.rds
+          if-no-files-found: ignore

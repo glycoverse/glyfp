@@ -1,0 +1,13 @@
+template:
+  bootstrap: 5
+development:
+  mode: auto
+reference:
+- title: Fingerprints and reusable encoders
+  contents:
+  - glycan_fingerprint
+articles:
+- title: Getting started
+  navbar: ~
+  contents:
+  - fingerprints

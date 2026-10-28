@@ -14,7 +14,9 @@ fit_fingerprint(
   ...,
   max_size = 3L,
   unknown = "ignore",
-  na_action = "propagate"
+  na_action = "propagate",
+  python = Sys.getenv("GLYFP_PYTHON", "python3"),
+  checkpoint = NULL
 )
 
 transform_fingerprint(glycans, encoder)
@@ -27,7 +29,8 @@ there is no separate format argument. For explicit format selection, call
 the corresponding glyparse parser first. Invalid text raises a parse error.}
 
 \item{method}{Either \code{"substructure_binary"} (default, presence/absence) or
-\code{"substructure_count"} (number of occurrences).}
+\code{"substructure_count"} (number of occurrences), or \code{"sweetnet"} (optional
+pretrained 128-dimensional CPU embedding).}
 
 \item{...}{For \code{glycan_fingerprint()}, named options forwarded to
 \code{fit_fingerprint()}, such as \code{max_size}, \code{unknown}, and \code{na_action}.
@@ -36,24 +39,39 @@ Options after \code{...} must be named.}
 
 \item{max_size}{Maximum number of residues per connected substructure, an
 integer from 1 to 7. Includes all sizes from 1 through this maximum.
-Defaults to 3, including mono-, di-, and branched trisaccharides.}
+Defaults to 3, including mono-, di-, and branched trisaccharides. Applies
+only to substructure methods; supplying it for SweetNet is an error.}
 
 \item{unknown}{How transform handles features absent from the fitted
 dictionary: \code{"ignore"} (default), \code{"warn"}, or \code{"error"}. Unknown features
-never add dimensions. Warnings are issued once per batch.}
+never add dimensions. Warnings are issued once per batch. SweetNet defaults
+to \code{"error"} and supports only that policy: tokens outside its fixed pretrained
+vocabulary are rejected, not ignored or assigned untrained representations.}
 
 \item{na_action}{\code{"propagate"} (default) excludes missing glycans from fitting
-and returns an all-\code{NA_integer_} vector at each missing input position.
+and returns an all-NA vector at each missing input position (integer for
+substructures, double for SweetNet).
 \code{"error"} rejects missing glycans during either fitting or transformation.}
+
+\item{python}{For SweetNet only, a Python executable in an environment with
+the dependencies documented in the SweetNet vignette. Defaults to environment
+variable \code{GLYFP_PYTHON}, or \code{"python3"}. No environment is installed automatically.}
+
+\item{checkpoint}{For SweetNet only, the local path to the supported official
+legacy \code{glycowork_sweetnet_species.pt} checkpoint. Required; its SHA-256 is
+verified before loading. No weights are downloaded automatically.}
 
 \item{encoder}{An unmodified object returned by \code{fit_fingerprint()}.}
 }
 \value{
 \code{glycan_fingerprint()} and \code{transform_fingerprint()} return a list
-of named integer vectors with the same length, order, and names as \code{glycans}.
+of named integer vectors (substructures) or double vectors (SweetNet), with
+the same length, order, and names as \code{glycans}. Missing SweetNet inputs yield
+128 \code{NA_real_} values.
 All vectors use \code{encoder$features} as their names, including zero entries.
 \code{fit_fingerprint()} returns a \code{glyfp_encoder} list containing \code{features},
-\code{method}, \code{params}, \code{schema_version}, and \code{versions}.
+\code{method}, \code{params}, \code{schema_version}, and \code{versions}. For SweetNet, \code{features}
+are \code{sweetnet_001} through \code{sweetnet_128}; \code{params$model} fixes model metadata.
 }
 \description{
 \code{glycan_fingerprint()} fits a dictionary on the supplied batch, then transforms
@@ -62,7 +80,7 @@ reusable encoder; \code{transform_fingerprint()} applies its fixed dictionary,
 method, and parameters to another batch.
 }
 \details{
-Features are canonical IUPAC strings returned by \code{\link[glymotif:extract_motif]{glymotif::extract_motif()}}.
+For substructure methods, features are canonical IUPAC strings returned by \code{\link[glymotif:extract_motif]{glymotif::extract_motif()}}.
 Counts come directly from \code{\link[glymotif:count_motif]{glymotif::count_motifs()}} with substructure
 alignment, linkages included, strict substituent matching, and strict mode.
 Overlapping occurrences count separately; symmetric mappings of the same
@@ -77,7 +95,7 @@ Alditol structures and unresolved floating parts/substituents are rejected in
 this version. Protein/lipid attachments, 3D geometry, and atomic stereochemistry
 beyond the residue/linkage labels are not encoded.
 
-\strong{Each top-level call fits its own batch. Independently computed batches must
+\strong{Each top-level substructure call fits its own batch. Independently computed batches must
 not be compared directly, even when their vectors have equal lengths.}
 Combine all glycans into one call, or fit once and reuse the encoder. In a
 predictive workflow fit on training data only, then transform held-out data.
@@ -93,13 +111,32 @@ not training graphs or external pointers. Transform requires the same
 glyrepr, glymotif, and glyparse versions used for fitting, so changed upstream
 normalization or matching semantics cannot silently alter saved encoders.
 
-An empty input returns \code{list()}. Fitting empty or all-missing input creates
+An empty input returns \code{list()}. For substructure methods, fitting empty or all-missing input creates
 an empty dictionary: each transformed vector then has length zero, including
 missing entries, whose missingness cannot be represented at zero dimensions.
 Keep the original \code{is.na(glycans)} mask when using such an encoder.
 Large, highly branched structures can be expensive to enumerate; start with
-the default \code{max_size = 3} and increase only as needed. Model embeddings are
-not implemented in this version.
+the default \code{max_size = 3} and increase only as needed.
+
+SweetNet uses the pretrained species model from glycowork 1.9.0. Fitting binds
+a fixed pretrained coordinate space and validates inputs, without training.
+It always has 128 features, including when fitted to empty/all-missing input.
+Independent SweetNet fits are comparable only when their recorded model and
+preprocessing metadata match. Reusing one encoder is recommended.
+Unknown reducing-end anomers at the residue's inferred normal carbon position
+are omitted from the model input; this is glyrepr's default annotation for an
+unspecified reducing end. Explicit alpha/beta half-linkages, other reducing-end
+positions, and ambiguous internal linkages are rejected. Every model-parsed
+directed residue/linkage graph must be label-isomorphic to the glyrepr graph.
+No unknown model token is accepted. See \code{vignette("sweetnet", package = "glyfp")}.
+
+The SweetNet encoder records local runtime/checkpoint paths, checkpoint and
+vocabulary SHA-256, preprocessing/readout, code hashes and dependency versions.
+Every transform validates these records. Restore the same paths/environment
+when loading an RDS; no Python process or model pointer is serialized. CPU
+evaluation uses one graph at a time, frozen normalization, disabled dropout,
+deterministic algorithms and one torch thread. Cross-platform comparisons
+should allow floating-point tolerance (tested at 1e-5).
 }
 \examples{
 library(glyrepr)

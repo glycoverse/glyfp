@@ -11,9 +11,10 @@ experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](h
 
 **glyfp** turns glycans into structural fingerprints for comparison and
 modeling. It learns a dictionary of connected residue substructures and
-encodes each glycan as a binary or count vector. It uses **glymotif**
-for extraction and matching, **glyparse** for text input, and
-**glyrepr** for structure representation.
+encodes each glycan as a binary or count vector. An optional pretrained
+SweetNet method provides 128-dimensional embeddings. It uses
+**glymotif** for extraction and matching, **glyparse** for text input,
+and **glyrepr** for structure representation.
 
 -   `glycan_fingerprint()` fits and transforms one batch, returning a
     simple list.
@@ -64,9 +65,10 @@ structures become expensive as the maximum size grows.
 
 ## Comparable fingerprints across batches
 
-**Every `glycan_fingerprint()` call fits its own batch. Results from
-independent calls cannot be compared directly, even if the vectors have
-equal lengths.** Their positions can refer to different motifs.
+**Every substructure `glycan_fingerprint()` call fits its own batch.
+Results from independent calls cannot be compared directly, even if the
+vectors have equal lengths.** Their positions can refer to different
+motifs.
 
 For a joint comparison, combine all glycans in one call:
 
@@ -143,10 +145,33 @@ not atom-level or 3D descriptors.
     Names, duplicates, and input order are preserved; duplicate
     structures share the same computed values.
 -   Unresolved floating parts, floating substituents, and alditols are
-    explicitly rejected in this first version. Embedding methods are not
-    yet part of the R API; an actual pretrained SweetNet CPU feasibility
-    probe is included under `dev/`, with its environment and checkpoint
-    recorded in the method review.
+    explicitly rejected in this first version. SweetNet has additional
+    supported-input restrictions described below.
+
+## Optional pretrained SweetNet
+
+`method = "sweetnet"` returns a list of 128-dimensional double vectors
+using the verified legacy glycowork 1.9.0 species model. It needs a
+separately configured Python environment, optional R package jsonlite,
+and an explicit local checkpoint. Default binary/count use does not load
+Python. No installation or download occurs automatically.
+
+``` r
+encoder <- fit_fingerprint(
+  c("Gal(b1-4)GlcNAc", "GlcNAc"), method = "sweetnet",
+  python = "/path/to/python", checkpoint = "/path/to/glycowork_sweetnet_species.pt"
+)
+fp <- transform_fingerprint(c("Gal(b1-4)GlcNAc", NA_character_), encoder)
+```
+
+Unknown reducing-end anomers at the normal inferred carbon position are
+accepted; explicit alpha/beta half-linkages and ambiguous internal
+linkages are rejected. Unknown pretrained tokens are errors. The encoder
+fixes weights, vocabulary, preprocessing, code hashes, versions and
+readout. Fit does not retrain the model; independent SweetNet fits share
+coordinates only when that metadata matches. See the [SweetNet
+vignette](vignettes/sweetnet.Rmd) for installation, checkpoint
+provenance, reproducibility, serialization and executable examples.
 
 See [the method review](dev/methods.md) for literature, scope, and the R
 torch versus Python implementation assessment. The [fingerprint

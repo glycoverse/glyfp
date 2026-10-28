@@ -61,7 +61,8 @@ contract, so this is deliberately tested as an unsupported boundary.
 
 ## Batch, missingness and persistence contract
 
-Top-level calls fit on the supplied batch and return only a vector list. Equal
+Top-level calls return only a vector list. Substructure methods fit their
+dictionary on the supplied batch. Equal
 vector lengths from separate calls do not imply comparable coordinates. For
 comparisons, combine all glycans once or fit once and reuse one encoder. For model
 evaluation, fit on training data only.
@@ -73,7 +74,8 @@ This conservative requirement avoids silently accepting upstream changes to
 parsing, canonicalization or matching. Dictionary order and method are never
 modified during transform. Do not edit encoder internals by hand.
 
-`NA` entries do not add features and yield all-NA vectors. Empty/all-NA fitting
+`NA` entries do not add features and yield all-NA vectors. For substructure
+methods, empty/all-NA fitting
 creates an empty dictionary; missingness cannot be encoded in length-zero vectors,
 so callers must retain the original mask. Unknown features are ignored, warned
 about once per batch, or rejected according to the stored policy. They never
@@ -129,10 +131,11 @@ generalized to the newer official glycowork distribution:
   SweetNet uses mean pooling. Matching tensor shapes alone is not enough to
   interchange model generations or vocabularies.
 
-No model code or weight file is bundled in the R package. The paper's license
+No upstream model source or weight file is bundled in the R package; the small
+glyfp Python adapter is included under inst/python/. The paper's license
 is not used as a substitute for the separately declared code/weight licenses.
 
-### CPU feasibility probe and next integration boundary
+### CPU validation and the optional SweetNet method
 
 `dev/validate-sweetnet.py` uses the authors' actual legacy SweetNet architecture
 and official pretrained checkpoint, verifies its SHA-256, loads the complete
@@ -164,29 +167,57 @@ eagerly imports GIFFLAR's RDKit/GlyLES support even for SweetNet, so installing
 only PyTorch/PyG was insufficient. The 3.29 MB weight was downloaded separately
 into the task directory, not into package source.
 
-For a production optional `sweetnet` method, the encoder must fix the code and
-preprocessing versions, checkpoint hash, token-vocabulary hash, readout and
-dimension. It would expose numerical latent-coordinate names instead of a motif
-dictionary, while preserving the same list-only top-level contract. Before adding
-that method, validate conversion from all supported glyrepr inputs to the model's
-IUPAC dialect, including reducing-end half-linkages, unsupported modifications,
-missing values and unknown tokens. A general `embedding` name would obscure the
-model/version distinction. GIFFLAR remains a second candidate after molecular
-graph conversion and CPU inference are checked with its current checkpoint.
+The optional **`method = "sweetnet"` is now implemented** through all three R
+functions. It uses this verified legacy checkpoint and the authors' glycowork
+1.9.0 implementation. The method requires explicit local `python` and `checkpoint`
+configuration (Python can default from `GLYFP_PYTHON`), with optional jsonlite for
+the offline subprocess protocol. It installs or downloads nothing. Binary/count
+methods do not load Python or need jsonlite.
 
-One concrete normalization gap was reproduced: glyrepr canonicalizes
-`Gal(b1-4)GlcNAc` to `Gal(b1-4)GlcNAc(?1-`. glycowork 1.9.0 graph parsing treats
-the final `?1-` as an extra node absent from the pretrained vocabulary; explicit
-reducing-end `b1-` is also absent. Passing canonical strings through unchanged
-would therefore alter the model input. Silently deleting these constraints
-would discard chemistry that the structural fingerprints retain. This needs an
-explicit model-specific supported-input policy and text/object parity tests,
-so the feasibility probe is not advertised as a completed general R method.
+Fit validates input and binds the pretrained coordinate system; it performs no
+training. Features are `sweetnet_001` through `sweetnet_128`. The encoder records
+checkpoint/token-vocabulary SHA-256, preprocessing version and R function hash,
+Python adapter/upstream source hashes, dependency versions, readout, CPU device,
+fixed single-graph batch size, and local runtime/checkpoint paths. Transform
+validates the same metadata and checkpoint, including for empty input. A saved
+encoder contains plain R data; restore the recorded paths/environment to reuse it.
+Independent SweetNet fits are comparable only when their model metadata match.
 
-An optional Python bridge is the shortest evidence-backed integration route;
-native R torch is reasonable after numerical parity with the original model.
-Neither a Python state dictionary nor a `.pt` extension proves that
-`torch::jit_load()` can read the file as a scripted model. No scripted GIFFLAR
+The R-facing normalization policy is deliberately finite and tested. In
+[glyrepr's parser](https://github.com/glycoverse/glyrepr/blob/main/R/iupac-to-structure.R),
+`.infer_reducing_end_anomer()` adds `(?` + `infer_anomer_pos()` + `-` when no
+half-linkage was supplied. Thus `Gal(b1-4)GlcNAc` becomes
+`Gal(b1-4)GlcNAc(?1-`. The glycowork parser instead treats `?1-` as a separate node
+absent from the pretrained vocabulary. glyfp removes a reducing-end half-linkage
+only if its anomer is unknown and its carbon position equals the residue's normal
+inferred position. Explicit unknown annotations with the same semantics are
+accepted as equivalent objects; an explicit alpha/beta anomer or other position
+is rejected. Internal linkages must be fully specified. Floating metadata and
+alditols remain unsupported.
+
+Before inference, the model-parsed **directed** residue/linkage graph must be
+label-isomorphic to the original glyrepr graph, including substituent labels.
+This protects against model-parser normalization that would alter the input.
+Every token must be in the pinned vocabulary. SweetNet defaults to
+`unknown = "error"` and supports only that policy: ignoring a token or using an
+untrained unknown embedding would not be a validated representation.
+`max_size` is rejected for this method. Empty/all-NA fitting still has 128
+coordinates; NA inputs yield 128 `NA_real_` entries, while empty transform returns
+`list()`. Names, order, duplicates and text/object equivalence are retained.
+
+The production bridge evaluates one graph at a time with CPU, one torch thread,
+evaluation mode, frozen normalization, no gradients and deterministic algorithms.
+This removes caller batch composition from accumulation order. Tests compare
+against independently obtained upstream values at tolerance 1e-5; bitwise
+cross-platform reproducibility is not promised. The checkpoint is loaded with
+`weights_only=True` and `strict=True`, with no random-weight fallback. See the
+SweetNet vignette for exact setup, executable examples and opt-in integration tests.
+
+GIFFLAR remains a candidate after its current checkpoint's molecular graph
+conversion and CPU inference are verified. An optional Python bridge is now the
+implemented route for SweetNet; native R torch remains future work requiring
+numerical parity. A Python state dictionary or `.pt` extension does not prove
+that `torch::jit_load()` can read it as a scripted model. No scripted GIFFLAR
 artifact or native R parity was verified here.
 
 ## Ecosystem references and delivery scope
@@ -209,3 +240,8 @@ vignette, testthat edition 3, a pkgdown index, and check/coverage workflows. CI 
 configured only: no remote repository was created, no workflow was run remotely,
 and no release, publication or PR was made. The logo follows the inspected
 Glycoverse hexagon geometry and is delivered as editable SVG plus transparent PNG.
+
+The sole working copy was moved at the user's request to
+`/Users/fubin/glycoverse/packages/glyfp`. The former task/glyfp directory no longer
+exists; archives under the task directory are delivery snapshots, not active
+working copies.

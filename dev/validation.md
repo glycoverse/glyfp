@@ -6,7 +6,9 @@
 
 - `air format R tests`.
 - `devtools::document()` regenerated NAMESPACE and Rd documentation.
-- `devtools::test()`: **97 passed, 0 failed, 0 warnings, 0 skipped**.
+- `devtools::test()`: **147 passed, 0 failed, 0 warnings, 0 skipped**, including the actual pretrained
+  SweetNet integration test configured through GLYFP_TEST_PYTHON and
+  GLYFP_TEST_CHECKPOINT.
 - README.Rmd rendered with `rmarkdown::github_document(html_preview = FALSE)`
   after `devtools::load_all()`; all evaluated examples completed.
 - `R CMD build glyfp`: **OK**, including vignette construction.
@@ -37,12 +39,15 @@ igraph 2.3.4, testthat 3.3.2, roxygen2 7.3.3.
 
 ## Evidence outside the package source
 
-All paths below are relative to the parent task directory:
+Evidence directory: `/Users/fubin/Documents/Codex/2026-10-28/task`.
+The active working copy is `/Users/fubin/glycoverse/packages/glyfp`; migration
+was verified by loading the package and rerunning all 97 structural assertions.
+The paths below are relative to the evidence directory:
 
 - `build.log`: final package build output.
 - `check.log`: final check console output.
 - `glyfp.Rcheck/00check.log`: final check summary, Status: OK.
-- `glyfp.Rcheck/tests/testthat.Rout`: installed-package result, PASS 97.
+- `glyfp.Rcheck/tests/testthat.Rout`: installed-package result, PASS 147.
 - `glyfp_0.0.0.9000.tar.gz`: checked source package.
 - `check-as-cran.log`: separate unsuccessful online incoming-check attempt.
 
@@ -64,9 +69,19 @@ All paths below are relative to the parent task directory:
   runtime was not installed and native R numerical parity was not checked.
   Python CPU SweetNet inference succeeded; current GIFFLAR checkpoints and MIT
   licensing were verified, but GIFFLAR inference was not run. The R-facing
-  input-normalization/unknown-token contract for an embedding method remains
-  integration work; no random/untrained embedding is exposed.
+  input-normalization/unknown-token contract is now implemented and tested for
+  the optional SweetNet method. It rejects explicit reducing-end anomers,
+  ambiguous internal links and unknown vocabulary tokens; no random/untrained
+  embedding is exposed.
 
 No remote repository, PR, release, publication or deployment was created. A local
-Git repository was initialized without commits or a remote. Existing ecosystem
+Git repository is independent, on main, and has no remote. Initial work is
+being recorded in semantic local commits at the user's request. Existing ecosystem
 repositories were inspected read-only.
+
+The optional production SweetNet adapter passed text/object parity, NA/empty
+handling, fixed 128 coordinates, input order/duplicates, serialization, independent
+upstream numerical references, and rejection of unknown tokens, altered metadata
+and incorrect weights. Independent read-only review found no substantive issue.
+The final R CMD check for this Python-bridge implementation completed with Status:
+OK and PASS 147; it is the baseline for the subsequently requested native R port.

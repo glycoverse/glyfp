@@ -12,24 +12,35 @@
 #'   there is no separate format argument. For explicit format selection, call
 #'   the corresponding glyparse parser first. Invalid text raises a parse error.
 #' @param method Either `"substructure_binary"` (default, presence/absence) or
-#'   `"substructure_count"` (number of occurrences).
+#'   `"substructure_count"` (number of occurrences), or `"sweetnet"` (optional
+#'   pretrained 128-dimensional CPU embedding).
 #' @param ... For `glycan_fingerprint()`, named options forwarded to
 #'   `fit_fingerprint()`, such as `max_size`, `unknown`, and `na_action`.
 #'   For `fit_fingerprint()`, reserved for future options and must be empty.
 #'   Options after `...` must be named.
 #' @param max_size Maximum number of residues per connected substructure, an
 #'   integer from 1 to 7. Includes all sizes from 1 through this maximum.
-#'   Defaults to 3, including mono-, di-, and branched trisaccharides.
+#'   Defaults to 3, including mono-, di-, and branched trisaccharides. Applies
+#'   only to substructure methods; supplying it for SweetNet is an error.
 #' @param unknown How transform handles features absent from the fitted
 #'   dictionary: `"ignore"` (default), `"warn"`, or `"error"`. Unknown features
-#'   never add dimensions. Warnings are issued once per batch.
+#'   never add dimensions. Warnings are issued once per batch. SweetNet defaults
+#'   to `"error"` and supports only that policy: tokens outside its fixed pretrained
+#'   vocabulary are rejected, not ignored or assigned untrained representations.
 #' @param na_action `"propagate"` (default) excludes missing glycans from fitting
-#'   and returns an all-`NA_integer_` vector at each missing input position.
+#'   and returns an all-NA vector at each missing input position (integer for
+#'   substructures, double for SweetNet).
 #'   `"error"` rejects missing glycans during either fitting or transformation.
+#' @param python For SweetNet only, a Python executable in an environment with
+#'   the dependencies documented in the SweetNet vignette. Defaults to environment
+#'   variable `GLYFP_PYTHON`, or `"python3"`. No environment is installed automatically.
+#' @param checkpoint For SweetNet only, the local path to the supported official
+#'   legacy `glycowork_sweetnet_species.pt` checkpoint. Required; its SHA-256 is
+#'   verified before loading. No weights are downloaded automatically.
 #' @param encoder An unmodified object returned by `fit_fingerprint()`.
 #'
 #' @details
-#' Features are canonical IUPAC strings returned by [glymotif::extract_motif()].
+#' For substructure methods, features are canonical IUPAC strings returned by [glymotif::extract_motif()].
 #' Counts come directly from [glymotif::count_motifs()] with substructure
 #' alignment, linkages included, strict substituent matching, and strict mode.
 #' Overlapping occurrences count separately; symmetric mappings of the same
@@ -44,7 +55,7 @@
 #' this version. Protein/lipid attachments, 3D geometry, and atomic stereochemistry
 #' beyond the residue/linkage labels are not encoded.
 #'
-#' **Each top-level call fits its own batch. Independently computed batches must
+#' **Each top-level substructure call fits its own batch. Independently computed batches must
 #' not be compared directly, even when their vectors have equal lengths.**
 #' Combine all glycans into one call, or fit once and reuse the encoder. In a
 #' predictive workflow fit on training data only, then transform held-out data.
@@ -60,19 +71,41 @@
 #' glyrepr, glymotif, and glyparse versions used for fitting, so changed upstream
 #' normalization or matching semantics cannot silently alter saved encoders.
 #'
-#' An empty input returns `list()`. Fitting empty or all-missing input creates
+#' An empty input returns `list()`. For substructure methods, fitting empty or all-missing input creates
 #' an empty dictionary: each transformed vector then has length zero, including
 #' missing entries, whose missingness cannot be represented at zero dimensions.
 #' Keep the original `is.na(glycans)` mask when using such an encoder.
 #' Large, highly branched structures can be expensive to enumerate; start with
-#' the default `max_size = 3` and increase only as needed. Model embeddings are
-#' not implemented in this version.
+#' the default `max_size = 3` and increase only as needed.
+#'
+#' SweetNet uses the pretrained species model from glycowork 1.9.0. Fitting binds
+#' a fixed pretrained coordinate space and validates inputs, without training.
+#' It always has 128 features, including when fitted to empty/all-missing input.
+#' Independent SweetNet fits are comparable only when their recorded model and
+#' preprocessing metadata match. Reusing one encoder is recommended.
+#' Unknown reducing-end anomers at the residue's inferred normal carbon position
+#' are omitted from the model input; this is glyrepr's default annotation for an
+#' unspecified reducing end. Explicit alpha/beta half-linkages, other reducing-end
+#' positions, and ambiguous internal linkages are rejected. Every model-parsed
+#' directed residue/linkage graph must be label-isomorphic to the glyrepr graph.
+#' No unknown model token is accepted. See `vignette("sweetnet", package = "glyfp")`.
+#'
+#' The SweetNet encoder records local runtime/checkpoint paths, checkpoint and
+#' vocabulary SHA-256, preprocessing/readout, code hashes and dependency versions.
+#' Every transform validates these records. Restore the same paths/environment
+#' when loading an RDS; no Python process or model pointer is serialized. CPU
+#' evaluation uses one graph at a time, frozen normalization, disabled dropout,
+#' deterministic algorithms and one torch thread. Cross-platform comparisons
+#' should allow floating-point tolerance (tested at 1e-5).
 #'
 #' @returns `glycan_fingerprint()` and `transform_fingerprint()` return a list
-#'   of named integer vectors with the same length, order, and names as `glycans`.
+#'   of named integer vectors (substructures) or double vectors (SweetNet), with
+#'   the same length, order, and names as `glycans`. Missing SweetNet inputs yield
+#'   128 `NA_real_` values.
 #'   All vectors use `encoder$features` as their names, including zero entries.
 #'   `fit_fingerprint()` returns a `glyfp_encoder` list containing `features`,
-#'   `method`, `params`, `schema_version`, and `versions`.
+#'   `method`, `params`, `schema_version`, and `versions`. For SweetNet, `features`
+#'   are `sweetnet_001` through `sweetnet_128`; `params$model` fixes model metadata.
 #' @examples
 #' library(glyrepr)
 #' a <- as_glycan_structure(c("Gal(b1-4)GlcNAc", "GlcNAc"))
@@ -106,9 +139,28 @@ fit_fingerprint <- function(
   ...,
   max_size = 3L,
   unknown = "ignore",
-  na_action = "propagate"
+  na_action = "propagate",
+  python = Sys.getenv("GLYFP_PYTHON", "python3"),
+  checkpoint = NULL
 ) {
   rlang::check_dots_empty()
+  if (identical(method, "sweetnet") && missing(unknown)) {
+    unknown <- "error"
+  }
+  if (identical(method, "sweetnet") && !missing(max_size)) {
+    cli::cli_abort(
+      "{.arg max_size} applies only to substructure methods.",
+      class = "glyfp_error_argument"
+    )
+  }
+  if (
+    !identical(method, "sweetnet") && (!missing(python) || !missing(checkpoint))
+  ) {
+    cli::cli_abort(
+      "{.arg python} and {.arg checkpoint} apply only to SweetNet.",
+      class = "glyfp_error_argument"
+    )
+  }
   validate_options(method, max_size, unknown, na_action)
   params <- list(
     max_size = as.integer(max_size),
@@ -116,6 +168,9 @@ fit_fingerprint <- function(
     na_action = na_action
   )
   glycans <- normalize_glycans(glycans, na_action)
+  if (identical(method, "sweetnet")) {
+    return(fit_sweetnet(glycans, python, checkpoint, unknown, na_action))
+  }
   features <- extract_features(glycans, params$max_size)
   structure(
     list(
@@ -139,6 +194,9 @@ transform_fingerprint <- function(glycans, encoder) {
       "Encoder dependency versions differ from this session. Restore the recorded environment or fit a new encoder and recompute all batches.",
       class = "glyfp_error_version"
     )
+  }
+  if (identical(encoder$method, "sweetnet")) {
+    return(transform_sweetnet(glycans, encoder))
   }
   if (encoder$params$unknown != "ignore") {
     unseen <- setdiff(
@@ -199,11 +257,13 @@ print.glyfp_encoder <- function(x, ...) {
     "Features: ",
     length(x$features),
     "\n",
-    "Maximum residues: ",
-    x$params$max_size,
-    "\n",
     sep = ""
   )
+  if (identical(x$method, "sweetnet")) {
+    cat("Model: ", x$params$model$model, " (CPU, 128 dimensions)\n", sep = "")
+  } else {
+    cat("Maximum residues: ", x$params$max_size, "\n", sep = "")
+  }
   invisible(x)
 }
 
@@ -216,7 +276,11 @@ validate_options <- function(method, max_size, unknown, na_action) {
       )
     }
   }
-  choice(method, c("substructure_binary", "substructure_count"), "method")
+  choice(
+    method,
+    c("substructure_binary", "substructure_count", "sweetnet"),
+    "method"
+  )
   choice(unknown, c("ignore", "warn", "error"), "unknown")
   choice(na_action, c("propagate", "error"), "na_action")
   if (
@@ -249,7 +313,12 @@ validate_encoder <- function(x) {
     all(nzchar(x$features)) &&
     identical(x$features, sort(x$features, method = "radix")) &&
     is.list(x$params) &&
-    identical(names(x$params), c("max_size", "unknown", "na_action")) &&
+    (if (identical(x$method, "sweetnet")) {
+      valid_sweetnet_params(x$params) &&
+        identical(x$features, sweetnet_features())
+    } else {
+      identical(names(x$params), c("max_size", "unknown", "na_action"))
+    }) &&
     is.character(x$versions) &&
     identical(names(x$versions), c("glyrepr", "glymotif", "glyparse")) &&
     !anyNA(x$versions) &&
@@ -259,7 +328,7 @@ validate_encoder <- function(x) {
       {
         validate_options(
           x$method,
-          x$params$max_size,
+          if (identical(x$method, "sweetnet")) 3L else x$params$max_size,
           x$params$unknown,
           x$params$na_action
         )

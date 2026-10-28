@@ -5,7 +5,9 @@ Authors@R: person("Bin", "Fu", , "23110220018@m.fudan.edu.cn", role = c("aut", "
 Description: Encodes glycan structures as binary or count vectors of connected
     residue substructures. Learns explicit feature dictionaries and reuses them
     across batches, preserving residue identities, substituents, and glycosidic
-    linkage labels from 'glyrepr' structures.
+    linkage labels from 'glyrepr' structures. Optionally computes pretrained
+    'SweetNet' embeddings with a separately configured Python CPU environment
+    and verified local model weights.
 License: MIT + file LICENSE
 Depends: R (>= 4.1)
 Imports:
@@ -16,6 +18,7 @@ Imports:
     igraph,
     rlang
 Suggests:
+    jsonlite,
     knitr,
     rmarkdown,
     testthat (>= 3.0.0)

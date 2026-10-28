@@ -111,37 +111,24 @@ SweetNet is a graph neural network introduced by
 This optional method uses the **legacy glycowork 1.9.0 species checkpoint** and
 returns its 128-dimensional hidden representation. It does not train a model.
 
-Binary/count methods do not require Python or jsonlite. SweetNet uses an offline
-Python subprocess with the authors' architecture and inference code, so the R
-session does not load Python, LibTorch or model pointers.
+SweetNet runs entirely in R with the optional torch package. Binary/count
+methods neither load torch nor require its runtime. The native implementation
+uses the authors' vocabulary and reproduces three additive graph-convolution
+layers, mean pooling, and the two linear/batch-normalization layers that produce
+the pretrained readout. No Python installation is needed.
 
 ### Configure the optional environment
 
-Use a Python 3.11 environment with these tested core dependencies:
+Install the optional R packages and the official torch runtime explicitly:
 
-| Component | Tested version |
-|---|---|
-| glycowork | 1.9.0 |
-| torch | 2.8.0 |
-| torch-geometric | 2.6.1 |
-| GlyLES | 1.2.2 |
-| RDKit | 2026.9.1 |
-| NumPy / pandas | 2.4.6 / 3.0.5 |
-| pydot / antlr4-python3-runtime | 1.4.2 / 4.13.2 |
-
-A separate virtual environment can be prepared explicitly, for example:
-
-```sh
-python3.11 -m venv .venv-sweetnet
-.venv-sweetnet/bin/python -m pip install \
-  glycowork==1.9.0 torch==2.8.0 torch-geometric==2.6.1 \
-  glyles==1.2.2 rdkit==2026.9.1 numpy==2.4.6 pandas==3.0.5 \
-  pydot==1.4.2 antlr4-python3-runtime==4.13.2 scipy scikit-learn
+```{r, eval=FALSE}
+install.packages(c("torch", "digest", "zip"))
+torch::install_torch()
 ```
 
-Activate that environment or pass its Python executable explicitly. On Windows
-the executable is under `Scripts/python.exe`. Install the optional R dependency
-with `install.packages("jsonlite")`. The package performs no installation.
+The implementation was tested with R torch 0.17.0 and LibTorch 2.8.0 on CPU.
+The package does not install dependencies or download model weights during
+fitting or transformation.
 
 Obtain the [official legacy checkpoint](https://huggingface.co/DBojar/glycowork_models/blob/0a3981df888532e52b4c2d910bfb56b5a45ad955/glycowork_sweetnet_species.pt)
 from the authors' public MIT-licensed model repository and save it locally.
@@ -151,27 +138,31 @@ It is about 3.29 MB. Its SHA-256 must be:
 4ee19fc0593db0562c16585b556050694144816754750ebfe1876ed21ba0f4be
 ```
 
-SweetNet v2 weights are incompatible with this method. The model is loaded
-strictly with `torch.load(weights_only=True, map_location="cpu")`; missing,
-different or partial weights are errors. There is no random-weight fallback.
+SweetNet v2 weights are incompatible with this method. The legacy archive is a
+PyTorch state dictionary with CUDA device tags, rather than a TorchScript model.
+R torch's `load_state_dict()` lacks a `map_location` argument. For this one
+hash-verified archive, glyfp changes its 26 storage-device tags to CPU in a
+temporary copy, then loads it natively. The tensor storage bytes and original
+file are unchanged. This is a fixed-artifact loader, not a general `.pt`
+converter. Different or partial weights are rejected before deserialization;
+there is no random-weight fallback.
 
 ### Use the same three functions
 
-Set `GLYFP_PYTHON` to the Python executable and, for this executable example,
-`GLYFP_SWEETNET_CHECKPOINT` to the local weight file. The checkpoint can instead
-be passed directly to `fit_fingerprint()` or `glycan_fingerprint()`.
+Set `GLYFP_SWEETNET_CHECKPOINT` to the local official weight file for this example,
+or pass its path directly to `fit_fingerprint()` or `glycan_fingerprint()`.
 
 ```{r}
 library(glyfp)
-python <- Sys.getenv("GLYFP_PYTHON")
 weights <- Sys.getenv("GLYFP_SWEETNET_CHECKPOINT")
-configured <- nzchar(python) && nzchar(weights) && file.exists(weights)
+configured <- nzchar(weights) && file.exists(weights) &&
+  requireNamespace("torch", quietly = TRUE) && torch::torch_is_installed()
 
 if (configured) {
   a <- c("Gal(b1-4)GlcNAc", "GlcNAc", NA_character_)
   b <- "Man(a1-3)[Man(a1-6)]Man"
   encoder <- fit_fingerprint(
-    a, method = "sweetnet", python = python, checkpoint = weights
+    a, method = "sweetnet", checkpoint = weights
   )
   fp_a <- transform_fingerprint(a, encoder)
   fp_b <- transform_fingerprint(b, encoder)
@@ -188,7 +179,7 @@ The top-level convenience function still performs fit then transform:
 ```{r}
 if (configured) {
   fp <- glycan_fingerprint(
-    "Gal(b1-4)GlcNAc", "sweetnet", python = python, checkpoint = weights
+    "Gal(b1-4)GlcNAc", "sweetnet", checkpoint = weights
   )
   stopifnot(identical(fp[[1]], fp_a[[1]]))
 }
@@ -214,8 +205,8 @@ An explicit alpha/beta reducing-end annotation, another half-linkage position,
 or an ambiguous internal linkage is rejected. These restrictions avoid silently
 discarding specified chemistry. Floating parts/substituents and alditols remain
 unsupported. A token must exist in the fixed pretrained vocabulary, and the
-directed labeled residue/linkage graph parsed by glycowork must be isomorphic to
-the original glyrepr graph. Unsupported modifications cannot silently become an
+directed labeled residue/linkage graph is built directly from glyrepr.
+Numerical validation independently checked this graph against glycowork's parser. Unsupported modifications cannot silently become an
 unknown embedding.
 
 For SweetNet, `unknown = "error"` is both the default and the only supported
@@ -224,18 +215,20 @@ structural methods and cannot be supplied for SweetNet.
 
 ### Reproducibility and persistence
 
-The encoder records checkpoint and vocabulary SHA-256, model identity, R/Python
-preprocessing hashes, inference/code hashes, package versions, readout, CPU
+The encoder records checkpoint and vocabulary SHA-256, model identity, R
+preprocessing/inference hashes, R package versions, readout, CPU
 device and batch size. Every transform validates these records and local files,
 including transforms of empty input. No weights are downloaded during fitting
 or transformation.
 
 The readout is `bn2(lin2(...))`, before the second activation, dropout and
-classifier. Inference uses evaluation mode, frozen normalization, no gradients,
-deterministic torch algorithms, one torch thread and one graph per inference.
+classifier. Inference uses frozen normalization, no gradients, no dropout and
+one graph per inference, preserving the caller's torch thread settings.
 This makes caller batch composition irrelevant to the calculation on the same
-environment. Allow numerical tolerance across hardware/library implementations;
-validation uses 1e-5 for comparison with independent upstream outputs.
+environment. Allow numerical tolerance across hardware, thread settings and
+LibTorch builds: their full binary identity is not recorded in the encoder.
+Validation checks all 128 coordinates for 19 diverse glycans against the authors'
+Python implementation, with a maximum absolute coordinate error below 1e-5.
 
 Save the encoder with `saveRDS()`. It contains ordinary R data and local paths,
 not a live model. Reusing it requires the recorded environment and files at the
@@ -249,9 +242,9 @@ independent structural calls cannot be compared even when vector lengths match.
 ### Development integration test
 
 The normal R tests require no model download. To run the actual pretrained
-integration test, configure `GLYFP_TEST_PYTHON` and `GLYFP_TEST_CHECKPOINT` before
+integration tests, configure `GLYFP_TEST_CHECKPOINT` before
 `devtools::test()` or `R CMD check`. The test compares against independent
 upstream reference values and checks object/text parity, order, duplicates,
 single-vs-multiple input, serialization, missing values, empty fitting, unknown
-tokens and tampered metadata/weights. Without those variables, that one optional
-integration test is explicitly skipped.
+tokens and tampered metadata/weights. Without that variable, the optional
+pretrained integration tests are explicitly skipped.

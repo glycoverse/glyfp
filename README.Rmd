@@ -4,167 +4,83 @@ output: github_document
 
 <!-- README.md is generated from README.Rmd. Please edit that file -->
 
-```{r, include=FALSE}
-knitr::opts_chunk$set(collapse = TRUE, comment = "#>", fig.path = "man/figures/README-")
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.path = "man/figures/README-",
+  out.width = "100%"
+)
 ```
 
-# glyfp <img src="man/figures/logo.png" align="right" height="138" alt="glyfp: glycan fingerprints" />
+# glyfp <a href="#documentation"><img src="man/figures/logo.png" align="right" height="138" alt="glyfp logo" /></a>
 
 <!-- badges: start -->
 [![Lifecycle: experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://lifecycle.r-lib.org/articles/stages.html#experimental)
 <!-- badges: end -->
 
-**glyfp** turns glycans into structural fingerprints for comparison and modeling.
-It learns a dictionary of connected residue substructures and encodes each glycan
-as a binary or count vector. An optional pretrained SweetNet method provides
-128-dimensional embeddings. It uses **glymotif** for extraction and matching,
-**glyparse** for text input, and **glyrepr** for structure representation.
-
-- `glycan_fingerprint()` fits and transforms one batch, returning a simple list.
-- `fit_fingerprint()` returns a reusable encoder containing the dictionary, method,
-  and parameters.
-- `transform_fingerprint()` uses that encoder for another batch.
+The glyfp package represents glycans as fingerprints for comparison and modeling.
+It provides binary and count fingerprints of connected glycan substructures,
+reusable encoders for multiple batches, and optional pretrained SweetNet embeddings.
+Inputs can be glyrepr structures or text in formats supported by glyparse.
 
 ## Installation
 
-This is a local development version, not a CRAN or R-universe release.
-From an R session in this package directory:
+glyfp is under local development and is not yet available from CRAN, R-universe,
+or a remote repository. Install it from this package directory:
 
-```{r, eval=FALSE}
+```r
 # install.packages("pak")
 pak::repo_add(glycoverse = "https://glycoverse.r-universe.dev")
 pak::local_install(".")
 ```
 
-## One batch
+**Note:** Tips and troubleshooting for the meta-package
+[glycoverse](https://github.com/glycoverse/glycoverse) also apply here:
+[Installation of glycoverse](https://github.com/glycoverse/glycoverse#installation).
 
-Text formats are auto-detected exactly as in glymotif. All formats supported by
-`glyparse::auto_parse()` are accepted, including IUPAC-condensed, IUPAC-short,
-GlycoCT, and WURCS. A `glyrepr_structure` vector is also accepted. Explicit format
-selection can be performed with a glyparse parser before calling glyfp.
+## Documentation
+
+- 🚀 Get started: [Comparable glycan fingerprints](vignettes/fingerprints.Rmd)
+- 📚 Reference: [Fingerprint functions and encoders](man/glycan_fingerprint.Rd)
+- 🧠 Pretrained embeddings: [SweetNet](vignettes/sweetnet.Rmd)
+
+These links point to the local source documentation until the package website is
+published. After installation, use `help("glycan_fingerprint", package = "glyfp")`
+and `browseVignettes("glyfp")`.
+
+## Role in `glycoverse`
+
+glyfp is being developed as part of the
+[Glycoverse ecosystem](https://github.com/glycoverse/glycoverse). It builds on
+glyrepr for glycan structures, glyparse for text parsing, and glymotif for
+substructure extraction and counting. Its fingerprints are intended as inputs
+to glycan comparison, clustering, and predictive workflows.
+
+## Example
 
 ```{r}
 library(glyfp)
-glycans <- c(short = "Galb3Galb3Galb-", single = "Gal(b1-")
-fp <- glycan_fingerprint(glycans, method = "substructure_count", max_size = 2)
-fp
 ```
 
-The repeated disaccharide occurs twice, with one shared residue. Symmetric
-mappings of the same residue set count once. `substructure_binary` is the default
-and applies `count > 0` to the same counts. `max_size = 3` is the default, following
-glymotif, and includes all one-, two-, and three-residue fragments, including
-branched trisaccharides. Values from 1 through 7 are accepted;
-large, branched structures become expensive as the maximum size grows.
-
-## Comparable fingerprints across batches
-
-**Every substructure `glycan_fingerprint()` call fits its own batch. Results from independent
-calls cannot be compared directly, even if the vectors have equal lengths.**
-Their positions can refer to different motifs.
-
-For a joint comparison, combine all glycans in one call:
+Encode a batch of glycans as substructure counts:
 
 ```{r}
-a <- c("Gal(b1-3)GalNAc(a1-", "GalNAc(a1-")
-b <- "Gal(b1-4)GlcNAc(b1-"
-all_fp <- glycan_fingerprint(c(a, b))
-lengths(all_fp)
+glycans <- c("Gal(b1-3)Gal(b1-3)Gal(b1-", "Gal(b1-")
+glycan_fingerprint(glycans, method = "substructure_count", max_size = 2)
 ```
 
-For repeated or predictive use, fit once and transform each batch with the same
-encoder. Fit on training data only when evaluating a predictive model.
+The repeated disaccharide is counted twice, including overlapping occurrences.
+Use `method = "substructure_binary"`, the default, for presence/absence.
+
+For multiple batches, fit once and reuse the encoder:
 
 ```{r}
-encoder <- fit_fingerprint(a, method = "substructure_count")
-encoder
-encoder$features
-fp_a <- transform_fingerprint(a, encoder)
-fp_b <- transform_fingerprint(b, encoder)
-identical(names(fp_a[[1]]), names(fp_b[[1]]))
+encoder <- fit_fingerprint(glycans, method = "substructure_binary")
+transform_fingerprint(c("Gal(b1-3)Gal(b1-", NA_character_), encoder)
 ```
 
-Save and reload the encoder with `saveRDS()` / `readRDS()`. It stores ordinary R
-data and dependency versions. Transform rejects a dependency-version mismatch;
-restore the recorded environment or fit a new encoder and recompute every batch.
-
-```{r}
-path <- tempfile(fileext = ".rds")
-saveRDS(encoder, path)
-identical(transform_fingerprint(b, readRDS(path)), fp_b)
-unlink(path)
-```
-
-## What each feature means
-
-Feature names are canonical IUPAC motif strings, sorted by UTF-8 bytes, with no
-hashing or folding. Counts use glymotif's substructure alignment, with linkages
-included, strict substituent matching, and strict matching mode. This preserves
-branch topology, residue identities, linkage positions, and anomer constraints.
-A motif half-linkage constrains an internal residue's anomer as well as a
-reducing-end residue's anomer.
-
-Generic motif residues match compatible concrete residues; unknown motif linkage
-positions act as wildcards. Thus feature columns can overlap in meaning. The
-reverse direction is not assumed: a generic target is not evidence of a specific
-residue. These are glymotif matching semantics, not atom-level or 3D descriptors.
-
-## Missing, novel, and unsupported input
-
-- `NA` does not contribute features while fitting. Transformation preserves its
-  position with an all-NA integer vector. Use `na_action = "error"` to reject it.
-- Unknown features do not grow the dictionary. `unknown = "ignore"` is the
-  default; `"warn"` or `"error"` detects new extracted canonical motifs. A new
-  specific motif can still match a broader motif already in the dictionary.
-- Empty input returns `list()`. Empty/all-NA training data produces a zero-feature
-  encoder. Every output vector then has length zero, so retain `is.na(glycans)`
-  if you need to distinguish missing entries in this special case.
-- Invalid text is an error with the original glyparse error attached. Names,
-  duplicates, and input order are preserved; duplicate structures share the same
-  computed values.
-- Unresolved floating parts, floating substituents, and alditols are explicitly
-  rejected in this first version. SweetNet has additional supported-input
-  restrictions described below.
-
-## Optional pretrained SweetNet
-
-`method = "sweetnet"` returns a list of 128-dimensional double vectors using the
-verified legacy glycowork 1.9.0 species model. It needs a separately configured
-Python environment, optional R package jsonlite, and an explicit local checkpoint.
-Default binary/count use does not load Python. No installation or download occurs
-automatically.
-
-```{r, eval=FALSE}
-encoder <- fit_fingerprint(
-  c("Gal(b1-4)GlcNAc", "GlcNAc"), method = "sweetnet",
-  python = "/path/to/python", checkpoint = "/path/to/glycowork_sweetnet_species.pt"
-)
-fp <- transform_fingerprint(c("Gal(b1-4)GlcNAc", NA_character_), encoder)
-```
-
-Unknown reducing-end anomers at the normal inferred carbon position are accepted;
-explicit alpha/beta half-linkages and ambiguous internal linkages are rejected.
-Unknown pretrained tokens are errors. The encoder fixes weights, vocabulary,
-preprocessing, code hashes, versions and readout. Fit does not retrain the model;
-independent SweetNet fits share coordinates only when that metadata matches.
-See the [SweetNet vignette](vignettes/sweetnet.Rmd) for installation, checkpoint
-provenance, reproducibility, serialization and executable examples.
-
-See [the method review](dev/methods.md) for literature, scope, and the R torch
-versus Python implementation assessment. The [fingerprint vignette](vignettes/fingerprints.Rmd)
-contains further executable examples.
-
-## Development
-
-The package layout, generated README, pkgdown index, and R-CMD-check workflow
-follow the development package [glyenzy](https://github.com/glycoverse/glyenzy).
-CI checks Linux, macOS, and Windows plus R devel/oldrel and saves local coverage
-as a workflow artifact. It has no publishing or release step. Remote badges will
-be added after a repository exists and its runs can be verified.
-
-```{r, eval=FALSE}
-devtools::document()
-devtools::test()
-devtools::build_readme()
-devtools::check()
-```
+Each top-level substructure call fits its own dictionary; independently fitted
+batches are not directly comparable, even when their vectors have equal lengths.
+The [getting-started vignette](vignettes/fingerprints.Rmd) shows both combining
+batches in one call and reusing an encoder, along with missing and unknown input.

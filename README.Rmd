@@ -17,6 +17,9 @@ knitr::opts_chunk$set(
 
 <!-- badges: start -->
 [![Lifecycle: experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://lifecycle.r-lib.org/articles/stages.html#experimental)
+[![R version](https://img.shields.io/badge/R-%3E%3D%204.1-blue.svg)](https://www.r-project.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE.md)
+[![Glycoverse](https://img.shields.io/badge/Glycoverse-ecosystem-416B69.svg)](https://github.com/glycoverse/glycoverse)
 <!-- badges: end -->
 
 The glyfp package represents glycans as fingerprints for comparison and modeling.

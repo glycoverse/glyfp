@@ -31,10 +31,20 @@
 #'   and returns an all-NA vector at each missing input position (integer for
 #'   substructures, double for SweetNet).
 #'   `"error"` rejects missing glycans during either fitting or transformation.
-#' @param checkpoint For SweetNet only, the local path to the supported official
-#'   legacy `glycowork_sweetnet_species.pt` checkpoint. Required; its SHA-256 is
-#'   verified before loading. R torch reads a temporary CPU-relocated copy; the
-#'   original file is unchanged. No weights are downloaded automatically.
+#' @param checkpoint For SweetNet, `"sweetnet-v2"` (default), `"sweetnet-v1"`
+#'   (legacy), or a local path to either supported official checkpoint. Named
+#'   checkpoints are downloaded from a fixed official revision on first use and
+#'   verified with SHA-256 before caching or loading. Local files are identified
+#'   by hash and never replaced or downloaded. Both models return 128 coordinates,
+#'   but their coordinate spaces differ. This option applies only to SweetNet.
+#' @param cache_dir Directory for named SweetNet checkpoints. Defaults to the
+#'   per-user cache returned by `tools::R_user_dir("glyfp", "cache")`. No directory
+#'   is created for a local checkpoint or an offline cache miss.
+#' @param download Whether a missing named checkpoint may be downloaded (default
+#'   `TRUE`). Set `FALSE` for offline use; a verified cache entry or local file is
+#'   then required. Corrupt cache files are rejected, never silently overwritten.
+#'   This policy and the cache directory are stored in the encoder and reused
+#'   during transformation. Loading the package does not access the network.
 #' @param encoder An unmodified object returned by `fit_fingerprint()`.
 #'
 #' @details
@@ -76,7 +86,8 @@
 #' Large, highly branched structures can be expensive to enumerate; start with
 #' the default `max_size = 3` and increase only as needed.
 #'
-#' SweetNet uses the pretrained species model from glycowork 1.9.0. Fitting binds
+#' SweetNet supports the legacy and v2 pretrained species models from glycowork.
+#' The default is v2, matching the current upstream pretrained model. Fitting binds
 #' a fixed pretrained coordinate space and validates inputs, without training.
 #' It always has 128 features, including when fitted to empty/all-missing input.
 #' Independent SweetNet fits are comparable only when their recorded model and
@@ -89,13 +100,18 @@
 #' No unknown model token is accepted. See `vignette("glyfp", package = "glyfp")`.
 #'
 #' SweetNet runs entirely in R using the optional torch, digest, and zip packages.
-#' Its encoder records the local checkpoint path, checkpoint and vocabulary
-#' SHA-256, preprocessing/readout, R implementation hashes and the R torch version.
-#' Every transform validates these records. Restore the checkpoint at the same
-#' path when loading an RDS; no model pointers or weights are serialized.
-#' The supported official archive stores CUDA device tags. After verifying its
-#' exact hash, glyfp relocates only those tags to CPU in a temporary copy before
-#' calling [torch::load_state_dict()]. Tensor storage bytes are unchanged.
+#' Its encoder records model version, official source revision, weight and
+#' vocabulary SHA-256, preprocessing/readout, R implementation hashes and the R
+#' torch version. Every transform validates these records. Independently fitted
+#' v1 and v2 encoders must not be mixed, even though both have 128 features with
+#' the same coordinate names. Retain the encoder alongside exported vectors.
+#' Named checkpoints can be reacquired if the cache is removed and downloading
+#' is allowed; local checkpoints must remain at their recorded paths. No model
+#' pointers or weights are serialized. The legacy archive stores CUDA tags;
+#' glyfp relocates these tags to CPU in a temporary copy before loading. Tensor
+#' storage bytes and the original file are unchanged. No Python is used.
+#' The optional torch runtime must be installed explicitly by the user; it is
+#' never automatically installed by these functions.
 #' CPU evaluation uses float32 tensors, one graph at a time, frozen normalization,
 #' no dropout and no gradients, without changing the caller's thread settings.
 #' Cross-platform/runtime comparisons should allow floating-point tolerance
@@ -143,7 +159,9 @@ fit_fingerprint <- function(
   max_size = 3L,
   unknown = "ignore",
   na_action = "propagate",
-  checkpoint = NULL
+  checkpoint = "sweetnet-v2",
+  cache_dir = tools::R_user_dir("glyfp", "cache"),
+  download = TRUE
 ) {
   rlang::check_dots_empty()
   if (identical(method, "sweetnet") && missing(unknown)) {
@@ -155,9 +173,12 @@ fit_fingerprint <- function(
       class = "glyfp_error_argument"
     )
   }
-  if (!identical(method, "sweetnet") && !missing(checkpoint)) {
+  if (
+    !identical(method, "sweetnet") &&
+      (!missing(checkpoint) || !missing(cache_dir) || !missing(download))
+  ) {
     cli::cli_abort(
-      "{.arg checkpoint} applies only to SweetNet.",
+      "{.arg checkpoint}, {.arg cache_dir}, and {.arg download} apply only to SweetNet.",
       class = "glyfp_error_argument"
     )
   }
@@ -169,7 +190,14 @@ fit_fingerprint <- function(
   )
   glycans <- normalize_glycans(glycans, na_action)
   if (identical(method, "sweetnet")) {
-    return(fit_sweetnet(glycans, checkpoint, unknown, na_action))
+    return(fit_sweetnet(
+      glycans,
+      checkpoint,
+      unknown,
+      na_action,
+      cache_dir,
+      download
+    ))
   }
   features <- extract_features(glycans, params$max_size)
   structure(

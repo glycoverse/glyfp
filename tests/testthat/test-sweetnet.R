@@ -186,7 +186,7 @@ test_that("pretrained SweetNet integration preserves the public contract", {
   writeLines("not model weights", broken)
   expect_error(
     fit_fingerprint("Gal", "sweetnet", checkpoint = broken),
-    class = "glyfp_error_backend"
+    class = "glyfp_error_checksum"
   )
 })
 

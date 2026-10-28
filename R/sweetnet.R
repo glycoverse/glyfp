@@ -155,12 +155,13 @@ sweetnet_vocabulary <- function() {
 
 # This is a relocation of one hash-verified artifact, not a general pickle reader.
 # Torch for R currently has no map_location option on load_state_dict(). Only
-# the 26 known BINUNICODE CUDA storage tags change; tensor storage bytes do not.
-sweetnet_load_weights <- function(checkpoint) {
+# BINUNICODE CUDA storage tags change; tensor storage bytes do not.
+sweetnet_load_weights <- function(checkpoint, id) {
+  spec <- sweetnet_checkpoints()[[id]]
   if (
     !identical(
       sweetnet_sha256(checkpoint),
-      "4ee19fc0593db0562c16585b556050694144816754750ebfe1876ed21ba0f4be"
+      spec$sha256
     )
   ) {
     cli::cli_abort(
@@ -172,7 +173,16 @@ sweetnet_load_weights <- function(checkpoint) {
   dir.create(directory)
   on.exit(unlink(directory, recursive = TRUE), add = TRUE)
   utils::unzip(checkpoint, exdir = directory)
-  pickle <- file.path(directory, "glycowork_sweetnet_species", "data.pkl")
+  records <- utils::unzip(checkpoint, list = TRUE)$Name
+  record <- records[grepl("^[^/]+/data[.]pkl$", records)]
+  if (length(record) != 1L) {
+    cli::cli_abort(
+      "Unexpected checkpoint archive metadata.",
+      class = "glyfp_error_backend"
+    )
+  }
+  archive <- dirname(record)
+  pickle <- file.path(directory, record)
   bytes <- readBin(pickle, "raw", n = file.info(pickle)$size)
   needle <- c(as.raw(c(88, 6, 0, 0, 0)), charToRaw("cuda:0"))
   positions <- which(vapply(
@@ -182,11 +192,8 @@ sweetnet_load_weights <- function(checkpoint) {
     },
     TRUE
   ))
-  if (length(positions) != 26L) {
-    cli::cli_abort(
-      "Unexpected storage metadata in the verified checkpoint.",
-      class = "glyfp_error_backend"
-    )
+  if (!length(positions)) {
+    return(torch::load_state_dict(checkpoint))
   }
   for (position in rev(positions)) {
     bytes <- c(
@@ -198,12 +205,14 @@ sweetnet_load_weights <- function(checkpoint) {
   }
   writeBin(bytes, pickle)
   relocated <- file.path(directory, "cpu.pt")
-  zip::zipr(relocated, "glycowork_sweetnet_species", root = directory)
+  zip::zipr(relocated, archive, root = directory)
   torch::load_state_dict(relocated)
 }
 
-sweetnet_metadata <- function() {
+sweetnet_metadata <- function(id) {
+  spec <- sweetnet_checkpoints()[[id]]
   sources <- list(
+    checkpoints = sweetnet_checkpoints,
     dependencies = sweetnet_dependencies,
     rng = sweetnet_restore_rng,
     preprocessing = sweetnet_inputs,
@@ -213,8 +222,9 @@ sweetnet_metadata <- function() {
     execution = sweetnet_run
   )
   list(
-    model = "sweetnet-glycowork-1.9.0-species",
-    checkpoint_sha256 = "4ee19fc0593db0562c16585b556050694144816754750ebfe1876ed21ba0f4be",
+    model = id,
+    source_revision = spec$revision,
+    checkpoint_sha256 = spec$sha256,
     vocabulary_sha256 = "838281860e3bbddc0de91ac635bf1ba746d79bf62891e5b86ca08eff537a974e",
     preprocessing = "glyfp-sweetnet-r-v2:unknown-inferred-root-only;exact-internal-links;directed-residue-linkage-graph",
     readout = "bn2(lin2):before-activation-dropout-classifier",
@@ -232,7 +242,7 @@ sweetnet_metadata <- function() {
   )
 }
 
-sweetnet_infer <- function(input, weights, vocabulary) {
+sweetnet_infer <- function(input, weights, vocabulary, id) {
   tokens <- unname(vocabulary[as.character(input$labels)])
   if (anyNA(tokens)) {
     unknown <- unique(as.character(input$labels)[is.na(tokens)])
@@ -266,15 +276,39 @@ sweetnet_infer <- function(input, weights, vocabulary) {
         aggregated$index_add_(1L, target, x$index_select(1L, source))
       }
       prefix <- paste0("conv", layer)
+      previous <- x
       x <- torch::nnf_linear(
         aggregated,
         weights[[paste0(prefix, ".lin_rel.weight")]],
         weights[[paste0(prefix, ".lin_rel.bias")]]
       ) +
         torch::nnf_linear(x, weights[[paste0(prefix, ".lin_root.weight")]])
+      if (id == "sweetnet-v2") {
+        norm <- paste0("norms.", layer - 1L)
+        x <- torch::nnf_batch_norm(
+          x,
+          weights[[paste0(norm, ".running_mean")]],
+          weights[[paste0(norm, ".running_var")]],
+          weights[[paste0(norm, ".weight")]],
+          weights[[paste0(norm, ".bias")]],
+          training = FALSE,
+          eps = 1e-5
+        )
+      }
       x <- torch::nnf_leaky_relu(x, negative_slope = 0.01)
+      if (id == "sweetnet-v2") x <- previous + x
     }
-    x <- x$mean(dim = 1L, keepdim = TRUE)
+    x <- if (id == "sweetnet-v2") {
+      torch::torch_cat(
+        list(
+          x$mean(dim = 1L, keepdim = TRUE),
+          x$amax(dim = 1L, keepdim = TRUE)
+        ),
+        dim = 2L
+      )
+    } else {
+      x$mean(dim = 1L, keepdim = TRUE)
+    }
     for (layer in seq_len(2L)) {
       x <- torch::nnf_linear(
         x,
@@ -297,20 +331,27 @@ sweetnet_infer <- function(input, weights, vocabulary) {
   })
 }
 
-sweetnet_run <- function(inputs, checkpoint, metadata = NULL, fit = FALSE) {
-  # Both namespace startup and torch's C++ deserializer can initialize R's RNG.
+sweetnet_run <- function(
+  inputs,
+  checkpoint,
+  metadata = NULL,
+  fit = FALSE,
+  cache_dir = tools::R_user_dir("glyfp", "cache"),
+  download = TRUE
+) {
   restore_rng <- sweetnet_restore_rng()
   on.exit(restore_rng(), add = TRUE)
   sweetnet_dependencies()
-  current <- sweetnet_metadata()
-  if (!is.null(metadata) && !identical(metadata, current)) {
+  if (
+    !is.null(metadata) &&
+      !identical(metadata, sweetnet_metadata(metadata$model))
+  ) {
     cli::cli_abort(
       "Encoder model, preprocessing, code, or dependency metadata differs; restore the fitted environment.",
       class = "glyfp_error_backend"
     )
   }
   vocabulary <- sweetnet_vocabulary()
-  # Validate every token even for fitting, before evaluating any graph.
   for (input in inputs) {
     unknown <- setdiff(as.character(input$labels), names(vocabulary))
     if (length(unknown)) {
@@ -320,25 +361,73 @@ sweetnet_run <- function(inputs, checkpoint, metadata = NULL, fit = FALSE) {
       )
     }
   }
-  weights <- sweetnet_load_weights(checkpoint)
+  resolved <- sweetnet_resolve(checkpoint, cache_dir, download)
+  current <- sweetnet_metadata(resolved$id)
+  if (!is.null(metadata) && !identical(metadata, current)) {
+    cli::cli_abort(
+      "Encoder model, preprocessing, code, or dependency metadata differs; restore the fitted environment.",
+      class = "glyfp_error_backend"
+    )
+  }
+  weights <- sweetnet_load_weights(resolved$path, resolved$id)
   embeddings <- if (fit) {
     list()
   } else {
-    lapply(inputs, sweetnet_infer, weights = weights, vocabulary = vocabulary)
+    lapply(
+      inputs,
+      sweetnet_infer,
+      weights = weights,
+      vocabulary = vocabulary,
+      id = resolved$id
+    )
   }
-  list(metadata = current, embeddings = embeddings)
+  list(
+    metadata = current,
+    embeddings = embeddings,
+    checkpoint = resolved$source
+  )
 }
 
-fit_sweetnet <- function(glycans, checkpoint, unknown, na_action) {
+fit_sweetnet <- function(
+  glycans,
+  checkpoint,
+  unknown,
+  na_action,
+  cache_dir,
+  download
+) {
   if (!identical(unknown, "error")) {
     cli::cli_abort(
       "SweetNet supports only {.code unknown = 'error'}; untrained/unknown tokens cannot be ignored.",
       class = "glyfp_error_argument"
     )
   }
-  checkpoint <- sweetnet_path(checkpoint, "checkpoint")
+  if (
+    !is.character(checkpoint) ||
+      length(checkpoint) != 1L ||
+      is.na(checkpoint) ||
+      !nzchar(checkpoint)
+  ) {
+    cli::cli_abort(
+      "{.arg checkpoint} must be a registered name or local path.",
+      class = "glyfp_error_argument"
+    )
+  }
+  if (!is.logical(download) || length(download) != 1L || is.na(download)) {
+    cli::cli_abort(
+      "{.arg download} must be TRUE or FALSE.",
+      class = "glyfp_error_argument"
+    )
+  }
+  cache_dir <- sweetnet_cache_dir(cache_dir)
   inputs <- sweetnet_inputs(unique(glycans[!is.na(glycans)]))
-  response <- sweetnet_run(inputs, checkpoint, fit = TRUE)
+  response <- sweetnet_run(
+    inputs,
+    checkpoint,
+    fit = TRUE,
+    cache_dir = cache_dir,
+    download = download
+  )
   structure(
     list(
       features = sweetnet_features(),
@@ -346,7 +435,9 @@ fit_sweetnet <- function(glycans, checkpoint, unknown, na_action) {
       params = list(
         unknown = unknown,
         na_action = na_action,
-        checkpoint = checkpoint,
+        checkpoint = response$checkpoint,
+        cache_dir = sweetnet_cache_dir(cache_dir),
+        download = download,
         model = response$metadata
       ),
       schema_version = 1L,
@@ -368,7 +459,9 @@ transform_sweetnet <- function(glycans, encoder) {
   response <- sweetnet_run(
     inputs,
     encoder$params$checkpoint,
-    metadata = encoder$params$model
+    metadata = encoder$params$model,
+    cache_dir = encoder$params$cache_dir,
+    download = encoder$params$download
   )
   values <- lapply(response$embeddings, function(row) as.double(unlist(row)))
   if (
@@ -395,15 +488,18 @@ valid_sweetnet_params <- function(x) {
   is.list(x) &&
     identical(
       names(x),
-      c("unknown", "na_action", "checkpoint", "model")
+      c("unknown", "na_action", "checkpoint", "cache_dir", "download", "model")
     ) &&
     identical(x$unknown, "error") &&
     is.character(x$na_action) &&
     length(x$na_action) == 1L &&
     !is.na(x$na_action) &&
     x$na_action %in% c("propagate", "error") &&
+    is.logical(x$download) &&
+    length(x$download) == 1L &&
+    !is.na(x$download) &&
     all(vapply(
-      x["checkpoint"],
+      x[c("checkpoint", "cache_dir")],
       function(p) {
         is.character(p) && length(p) == 1L && !is.na(p) && nzchar(p)
       },
@@ -414,6 +510,7 @@ valid_sweetnet_params <- function(x) {
       names(x$model),
       c(
         "model",
+        "source_revision",
         "checkpoint_sha256",
         "vocabulary_sha256",
         "preprocessing",
@@ -425,7 +522,12 @@ valid_sweetnet_params <- function(x) {
         "code_sha256"
       )
     ) &&
-    identical(x$model$model, "sweetnet-glycowork-1.9.0-species") &&
+    is.character(x$model$model) &&
+    length(x$model$model) == 1L &&
+    !is.na(x$model$model) &&
+    x$model$model %in% names(sweetnet_checkpoints()) &&
+    (!x$checkpoint %in% names(sweetnet_checkpoints()) ||
+      identical(x$checkpoint, x$model$model)) &&
     identical(x$model$dimensions, 128L) &&
     is.list(x$model$versions) &&
     is.list(x$model$code_sha256)

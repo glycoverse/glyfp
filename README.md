@@ -39,11 +39,9 @@ glycoverse](https://github.com/glycoverse/glycoverse#installation).
 
 ## Documentation
 
--   🚀 Get started: [Comparable glycan
-    fingerprints](vignettes/fingerprints.Rmd)
+-   🚀 Get started: [Get started with glyfp](vignettes/glyfp.Rmd)
 -   📚 Reference: [Fingerprint functions and
     encoders](man/glycan_fingerprint.Rd)
--   🧠 Pretrained embeddings: [SweetNet](vignettes/sweetnet.Rmd)
 
 These links point to the local source documentation until the package
 website is published. After installation, use
@@ -98,6 +96,6 @@ transform_fingerprint(c("Gal(b1-3)Gal(b1-", NA_character_), encoder)
 
 Each top-level substructure call fits its own dictionary; independently
 fitted batches are not directly comparable, even when their vectors have
-equal lengths. The [getting-started
-vignette](vignettes/fingerprints.Rmd) shows both combining batches in
-one call and reusing an encoder, along with missing and unknown input.
+equal lengths. The [getting-started vignette](vignettes/glyfp.Rmd) shows
+both combining batches in one call and reusing an encoder, along with
+missing and unknown input.

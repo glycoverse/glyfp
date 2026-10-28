@@ -36,7 +36,7 @@ jobs:
         run: |
           dir.create("docs/vignettes", showWarnings = FALSE)
           dir.create("docs/man", showWarnings = FALSE)
-          stopifnot(all(file.copy(c("vignettes/fingerprints.Rmd", "vignettes/sweetnet.Rmd"), "docs/vignettes", overwrite = TRUE)))
+          stopifnot(file.copy("vignettes/glyfp.Rmd", "docs/vignettes", overwrite = TRUE))
           stopifnot(file.copy("man/glycan_fingerprint.Rd", "docs/man", overwrite = TRUE))
       - uses: actions/upload-artifact@v7
         with:

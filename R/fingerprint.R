@@ -32,7 +32,7 @@
 #'   substructures, double for SweetNet).
 #'   `"error"` rejects missing glycans during either fitting or transformation.
 #' @param python For SweetNet only, a Python executable in an environment with
-#'   the dependencies documented in the SweetNet vignette. Defaults to environment
+#'   the dependencies documented in the Get started guide. Defaults to environment
 #'   variable `GLYFP_PYTHON`, or `"python3"`. No environment is installed automatically.
 #' @param checkpoint For SweetNet only, the local path to the supported official
 #'   legacy `glycowork_sweetnet_species.pt` checkpoint. Required; its SHA-256 is
@@ -88,7 +88,7 @@
 #' unspecified reducing end. Explicit alpha/beta half-linkages, other reducing-end
 #' positions, and ambiguous internal linkages are rejected. Every model-parsed
 #' directed residue/linkage graph must be label-isomorphic to the glyrepr graph.
-#' No unknown model token is accepted. See `vignette("sweetnet", package = "glyfp")`.
+#' No unknown model token is accepted. See `vignette("glyfp", package = "glyfp")`.
 #'
 #' The SweetNet encoder records local runtime/checkpoint paths, checkpoint and
 #' vocabulary SHA-256, preprocessing/readout, code hashes and dependency versions.

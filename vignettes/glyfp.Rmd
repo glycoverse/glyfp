@@ -1,11 +1,110 @@
 ---
-title: "Optional pretrained SweetNet fingerprints"
+title: "Get started with glyfp"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Optional pretrained SweetNet fingerprints}
+  %\VignetteIndexEntry{Get started with glyfp}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
+
+The glyfp package provides one interface for structural fingerprints and
+pretrained glycan representations. Inputs can be glyrepr structure vectors or
+text supported by glyparse. Both encoding functions return only a list of vectors.
+
+## Choose a method
+
+| Method | Coordinates | What fitting does |
+|---|---|---|
+| `substructure_binary` (default) | Presence/absence of connected residue motifs | Learns a motif dictionary from the supplied batch |
+| `substructure_count` | Number of overlapping motif occurrences | Learns the same motif dictionary |
+| `sweetnet` | 128 pretrained latent features | Binds and validates a fixed model, vocabulary and preprocessing |
+
+The sections below use the same three functions: `glycan_fingerprint()`,
+`fit_fingerprint()`, and `transform_fingerprint()`.
+
+## Substructure fingerprints
+
+```{r, include=FALSE}
+knitr::opts_chunk$set(collapse=TRUE, comment="#>")
+```
+
+```{r}
+library(glyfp)
+a <- c("Galb3Galb3Galb-", "Galb-")
+b <- c("Gal(b1-4)GlcNAc(b1-", NA_character_)
+```
+
+`glycan_fingerprint()` fits on the current batch and returns only a list of
+vectors. For joint comparison combine the batches before fitting:
+
+```{r}
+all_fp <- glycan_fingerprint(c(a, b), "substructure_count")
+lengths(all_fp)
+```
+
+Independent calls do not define a shared space, even at equal lengths:
+
+```{r}
+glycan_fingerprint("Gal(b1-")
+glycan_fingerprint("Man(a1-")
+```
+
+For repeated batches, retain one encoder. In model evaluation, fit it using
+training data only, then transform held-out data.
+
+```{r}
+encoder <- fit_fingerprint(a, "substructure_count", max_size=2)
+fp_a <- transform_fingerprint(a, encoder)
+fp_b <- transform_fingerprint(b, encoder)
+stopifnot(identical(names(fp_a[[1]]), names(fp_b[[1]])))
+stopifnot(all(is.na(fp_b[[2]])))
+```
+
+Text parsing is delegated to glyparse; structure objects produce the same values.
+
+```{r}
+objects <- glyparse::auto_parse(a)
+stopifnot(identical(transform_fingerprint(objects, encoder), fp_a))
+```
+
+Overlap is counted: the Gal-Gal motif occurs twice in the chain of three Gal
+residues. Branch permutations of a single occurrence do not multiply its count.
+
+```{r}
+fp_a[[1]]
+symmetric <- "Gal(b1-?)[Gal(b1-?)]GlcNAc(b1-"
+glycan_fingerprint(symmetric, "substructure_count")
+```
+
+Unknown canonical motifs never append columns. Known generic or ambiguous motifs
+can still match more specific input under glymotif's strict semantics.
+
+```{r}
+generic <- fit_fingerprint("Hex(?1-", "substructure_count")
+transform_fingerprint("Gal(b1-", generic)
+```
+
+Use `unknown="warn"` or `unknown="error"` while fitting to detect novel canonical
+motifs at transformation. Missing values propagate unless `na_action="error"`.
+An encoder fitted on empty/all-NA input has no features, so a length-zero vector
+cannot carry missingness; keep the original missing-value mask in that case.
+
+```{r}
+empty <- fit_fingerprint(character())
+transform_fingerprint(c("Gal(b1-", NA_character_), empty)
+```
+
+The encoder can be serialized without graph pointers. Preserve the recorded
+versions of glyrepr, glymotif and glyparse when reusing it in another session.
+
+```{r}
+path <- tempfile(fileext=".rds")
+saveRDS(encoder, path)
+stopifnot(identical(transform_fingerprint(a, readRDS(path)), fp_a))
+unlink(path)
+```
+
+## Pretrained SweetNet embeddings
 
 SweetNet is a graph neural network introduced by
 [Burkholz, Quackenbush and Bojar (2021)](https://doi.org/10.1016/j.celrep.2021.109251).
@@ -16,7 +115,7 @@ Binary/count methods do not require Python or jsonlite. SweetNet uses an offline
 Python subprocess with the authors' architecture and inference code, so the R
 session does not load Python, LibTorch or model pointers.
 
-## Configure the optional environment
+### Configure the optional environment
 
 Use a Python 3.11 environment with these tested core dependencies:
 
@@ -56,7 +155,7 @@ SweetNet v2 weights are incompatible with this method. The model is loaded
 strictly with `torch.load(weights_only=True, map_location="cpu")`; missing,
 different or partial weights are errors. There is no random-weight fallback.
 
-## Use the same three functions
+### Use the same three functions
 
 Set `GLYFP_PYTHON` to the Python executable and, for this executable example,
 `GLYFP_SWEETNET_CHECKPOINT` to the local weight file. The checkpoint can instead
@@ -100,7 +199,7 @@ validating the training inputs without updating any weights. Empty/all-NA fittin
 still produces 128 coordinates. An empty transform returns `list()`; an NA input
 returns 128 `NA_real_` values. `na_action = "error"` rejects NA.
 
-## Supported chemistry and unknown tokens
+### Supported chemistry and unknown tokens
 
 Text is first parsed by glyparse, just as for the structural methods. Text and
 equivalent glyrepr objects therefore use the same preprocessing.
@@ -123,7 +222,7 @@ For SweetNet, `unknown = "error"` is both the default and the only supported
 policy. `"ignore"` and `"warn"` are rejected. `max_size` applies only to the
 structural methods and cannot be supplied for SweetNet.
 
-## Reproducibility and persistence
+### Reproducibility and persistence
 
 The encoder records checkpoint and vocabulary SHA-256, model identity, R/Python
 preprocessing hashes, inference/code hashes, package versions, readout, CPU
@@ -147,7 +246,7 @@ only when their model metadata match; sharing one encoder is the easiest rule.
 Structural fingerprints still learn their dictionary from each fitting batch:
 independent structural calls cannot be compared even when vector lengths match.
 
-## Development integration test
+### Development integration test
 
 The normal R tests require no model download. To run the actual pretrained
 integration test, configure `GLYFP_TEST_PYTHON` and `GLYFP_TEST_CHECKPOINT` before

@@ -54,7 +54,7 @@ substructures, double for SweetNet).
 \code{"error"} rejects missing glycans during either fitting or transformation.}
 
 \item{python}{For SweetNet only, a Python executable in an environment with
-the dependencies documented in the SweetNet vignette. Defaults to environment
+the dependencies documented in the Get started guide. Defaults to environment
 variable \code{GLYFP_PYTHON}, or \code{"python3"}. No environment is installed automatically.}
 
 \item{checkpoint}{For SweetNet only, the local path to the supported official
@@ -128,7 +128,7 @@ are omitted from the model input; this is glyrepr's default annotation for an
 unspecified reducing end. Explicit alpha/beta half-linkages, other reducing-end
 positions, and ambiguous internal linkages are rejected. Every model-parsed
 directed residue/linkage graph must be label-isomorphic to the glyrepr graph.
-No unknown model token is accepted. See \code{vignette("sweetnet", package = "glyfp")}.
+No unknown model token is accepted. See \code{vignette("glyfp", package = "glyfp")}.
 
 The SweetNet encoder records local runtime/checkpoint paths, checkpoint and
 vocabulary SHA-256, preprocessing/readout, code hashes and dependency versions.

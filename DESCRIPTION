@@ -6,8 +6,8 @@ Description: Encodes glycan structures as binary or count vectors of connected
     residue substructures. Learns explicit feature dictionaries and reuses them
     across batches, preserving residue identities, substituents, and glycosidic
     linkage labels from 'glyrepr' structures. Optionally computes pretrained
-    'SweetNet' embeddings with a separately configured Python CPU environment
-    and verified local model weights.
+    'SweetNet' embeddings using 'torch' for R on the CPU and verified local
+    model weights.
 License: MIT + file LICENSE
 Depends: R (>= 4.1)
 Imports:
@@ -18,10 +18,14 @@ Imports:
     igraph,
     rlang
 Suggests:
-    jsonlite,
+    callr,
+    digest,
     knitr,
+    pkgload,
     rmarkdown,
-    testthat (>= 3.0.0)
+    testthat (>= 3.0.0),
+    torch (>= 0.17.0),
+    zip
 Config/testthat/edition: 3
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)

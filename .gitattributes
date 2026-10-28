@@ -1,0 +1,2 @@
+/inst/extdata/sweetnet-vocabulary.tsv text eol=lf
+/tests/testthat/fixtures/sweetnet-reference.csv text eol=lf

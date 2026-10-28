@@ -31,8 +31,8 @@ sweetnet_inputs <- function(glycans) {
     substituent <- igraph::vertex_attr(g, "sub")
     substituent[is.na(substituent)] <- ""
     labels <- c(paste0(mono, gsub(",", "", substituent, fixed = TRUE)), linkage)
-    # Compare the model parser's labeled, directed residue/linkage graph
-    # against the original glyrepr graph before computing any representation.
+    # Build the directed bipartite graph directly from glyrepr, preserving
+    # residue/substituent labels and each parent -> linkage -> child edge.
     endpoints <- igraph::as_edgelist(g, names = FALSE)
     n <- length(mono)
     edges <- unlist(
@@ -51,7 +51,7 @@ sweetnet_inputs <- function(glycans) {
   }))
 }
 
-sweetnet_path <- function(value, arg, executable = FALSE) {
+sweetnet_path <- function(value, arg) {
   if (
     !is.character(value) ||
       length(value) != 1L ||
@@ -63,10 +63,7 @@ sweetnet_path <- function(value, arg, executable = FALSE) {
       class = "glyfp_error_argument"
     )
   }
-  if (executable && !file.exists(value)) {
-    value <- unname(Sys.which(value))
-  }
-  if (!nzchar(value) || !file.exists(value) || dir.exists(value)) {
+  if (!file.exists(value) || dir.exists(value)) {
     cli::cli_abort(
       "{.arg {arg}} does not identify an existing local file.",
       class = "glyfp_error_backend"
@@ -75,103 +72,273 @@ sweetnet_path <- function(value, arg, executable = FALSE) {
   normalizePath(value, mustWork = TRUE)
 }
 
-sweetnet_run <- function(
-  inputs,
-  python,
-  checkpoint,
-  metadata = NULL,
-  fit = FALSE
-) {
-  if (!requireNamespace("jsonlite", quietly = TRUE)) {
-    cli::cli_abort(
-      "Install {.pkg jsonlite} to use SweetNet.",
-      class = "glyfp_error_backend"
-    )
+sweetnet_require_namespace <- function(pkg) {
+  requireNamespace(pkg, quietly = TRUE)
+}
+
+sweetnet_restore_rng <- function() {
+  seeded <- exists(".Random.seed", envir = globalenv(), inherits = FALSE)
+  if (seeded) {
+    seed <- get(".Random.seed", envir = globalenv(), inherits = FALSE)
   }
-  bridge <- system.file(
-    "python",
-    "sweetnet.py",
-    package = "glyfp",
-    mustWork = TRUE
+  function() {
+    if (seeded) {
+      assign(".Random.seed", seed, envir = globalenv())
+    } else if (exists(".Random.seed", envir = globalenv(), inherits = FALSE)) {
+      rm(".Random.seed", envir = globalenv())
+    }
+  }
+}
+
+sweetnet_dependencies <- function() {
+  # torch's namespace startup can auto-install its runtime and seed its generator
+  # from R's RNG. Loading this optional backend must do neither on the caller's behalf.
+  install <- Sys.getenv("TORCH_INSTALL", unset = NA_character_)
+  restore_rng <- sweetnet_restore_rng()
+  on.exit(restore_rng(), add = TRUE)
+  on.exit(
+    {
+      if (is.na(install)) {
+        Sys.unsetenv("TORCH_INSTALL")
+      } else {
+        Sys.setenv(TORCH_INSTALL = install)
+      }
+    },
+    add = TRUE
   )
-  paths <- vapply(seq_len(4L), function(i) tempfile(), "")
-  on.exit(unlink(paths), add = TRUE)
-  jsonlite::write_json(
-    list(
-      glycans = inputs,
-      checkpoint = checkpoint,
-      expected_metadata = metadata,
-      fit = fit,
-      preprocessing_source = paste(
-        deparse(body(sweetnet_inputs)),
-        collapse = "\n"
-      )
-    ),
-    paths[1L],
-    auto_unbox = TRUE,
-    null = "null",
-    digits = NA
-  )
-  status <- tryCatch(
-    suppressWarnings(system2(
-      python,
-      c(shQuote(bridge), shQuote(paths[1L]), shQuote(paths[2L])),
-      stdout = paths[3L],
-      stderr = paths[4L]
-    )),
-    error = function(e) {
+  Sys.setenv(TORCH_INSTALL = "0")
+  for (pkg in c("torch", "digest", "zip")) {
+    if (!sweetnet_require_namespace(pkg)) {
       cli::cli_abort(
-        "Could not start SweetNet Python.",
-        parent = e,
+        "Install {.pkg {pkg}} to use SweetNet.",
         class = "glyfp_error_backend"
       )
     }
-  )
-  response <- if (file.exists(paths[2L])) {
-    tryCatch(
-      jsonlite::read_json(paths[2L], simplifyVector = FALSE),
-      error = function(e) NULL
-    )
-  } else {
-    NULL
   }
-  if (!identical(status, 0L) || is.null(response) || !isTRUE(response$ok)) {
-    message <- if (
-      is.character(response$error) && length(response$error) == 1L
-    ) {
-      response$error
-    } else {
-      paste(
-        utils::tail(readLines(paths[4L], warn = FALSE), 8L),
-        collapse = "\n"
-      )
-    }
-    if (!nzchar(message)) {
-      message <- "The Python process did not return a valid result."
-    }
+  if (!torch::torch_is_installed()) {
     cli::cli_abort(
-      "SweetNet backend: {message}",
-      class = if (identical(response$error_type, "unknown")) {
-        "glyfp_error_unknown"
-      } else {
-        "glyfp_error_backend"
-      }
+      "Install the R torch runtime with {.code torch::install_torch()} to use SweetNet.",
+      class = "glyfp_error_backend"
     )
   }
-  response
 }
 
-fit_sweetnet <- function(glycans, python, checkpoint, unknown, na_action) {
+sweetnet_sha256 <- function(path) digest::digest(file = path, algo = "sha256")
+
+sweetnet_vocabulary <- function() {
+  path <- system.file(
+    "extdata",
+    "sweetnet-vocabulary.tsv",
+    package = "glyfp",
+    mustWork = TRUE
+  )
+  if (
+    !identical(
+      sweetnet_sha256(path),
+      "9edf1dbdb4df99ae6444108ba09e72f786c175c0b051a32fd82af3e46edc69fc"
+    )
+  ) {
+    cli::cli_abort(
+      "SweetNet vocabulary resource has changed.",
+      class = "glyfp_error_backend"
+    )
+  }
+  x <- utils::read.delim(
+    path,
+    header = FALSE,
+    quote = "",
+    comment.char = "",
+    colClasses = c("character", "integer")
+  )
+  stats::setNames(x[[2L]], x[[1L]])
+}
+
+# This is a relocation of one hash-verified artifact, not a general pickle reader.
+# Torch for R currently has no map_location option on load_state_dict(). Only
+# the 26 known BINUNICODE CUDA storage tags change; tensor storage bytes do not.
+sweetnet_load_weights <- function(checkpoint) {
+  if (
+    !identical(
+      sweetnet_sha256(checkpoint),
+      "4ee19fc0593db0562c16585b556050694144816754750ebfe1876ed21ba0f4be"
+    )
+  ) {
+    cli::cli_abort(
+      "Checkpoint SHA-256 does not match the supported official SweetNet artifact.",
+      class = "glyfp_error_backend"
+    )
+  }
+  directory <- tempfile("glyfp-sweetnet-")
+  dir.create(directory)
+  on.exit(unlink(directory, recursive = TRUE), add = TRUE)
+  utils::unzip(checkpoint, exdir = directory)
+  pickle <- file.path(directory, "glycowork_sweetnet_species", "data.pkl")
+  bytes <- readBin(pickle, "raw", n = file.info(pickle)$size)
+  needle <- c(as.raw(c(88, 6, 0, 0, 0)), charToRaw("cuda:0"))
+  positions <- which(vapply(
+    seq_len(length(bytes) - length(needle) + 1L),
+    function(i) {
+      identical(bytes[i + seq_along(needle) - 1L], needle)
+    },
+    TRUE
+  ))
+  if (length(positions) != 26L) {
+    cli::cli_abort(
+      "Unexpected storage metadata in the verified checkpoint.",
+      class = "glyfp_error_backend"
+    )
+  }
+  for (position in rev(positions)) {
+    bytes <- c(
+      bytes[seq_len(position - 1L)],
+      as.raw(c(88, 3, 0, 0, 0)),
+      charToRaw("cpu"),
+      bytes[seq.int(position + length(needle), length(bytes))]
+    )
+  }
+  writeBin(bytes, pickle)
+  relocated <- file.path(directory, "cpu.pt")
+  zip::zipr(relocated, "glycowork_sweetnet_species", root = directory)
+  torch::load_state_dict(relocated)
+}
+
+sweetnet_metadata <- function() {
+  sources <- list(
+    dependencies = sweetnet_dependencies,
+    rng = sweetnet_restore_rng,
+    preprocessing = sweetnet_inputs,
+    vocabulary = sweetnet_vocabulary,
+    weights = sweetnet_load_weights,
+    inference = sweetnet_infer,
+    execution = sweetnet_run
+  )
+  list(
+    model = "sweetnet-glycowork-1.9.0-species",
+    checkpoint_sha256 = "4ee19fc0593db0562c16585b556050694144816754750ebfe1876ed21ba0f4be",
+    vocabulary_sha256 = "838281860e3bbddc0de91ac635bf1ba746d79bf62891e5b86ca08eff537a974e",
+    preprocessing = "glyfp-sweetnet-r-v2:unknown-inferred-root-only;exact-internal-links;directed-residue-linkage-graph",
+    readout = "bn2(lin2):before-activation-dropout-classifier",
+    dimensions = 128L,
+    device = "cpu",
+    batch_size = 1L,
+    versions = list(torch = as.character(utils::packageVersion("torch"))),
+    code_sha256 = lapply(sources, function(f) {
+      digest::digest(
+        paste(deparse(body(f)), collapse = "\n"),
+        algo = "sha256",
+        serialize = FALSE
+      )
+    })
+  )
+}
+
+sweetnet_infer <- function(input, weights, vocabulary) {
+  tokens <- unname(vocabulary[as.character(input$labels)])
+  if (anyNA(tokens)) {
+    unknown <- unique(as.character(input$labels)[is.na(tokens)])
+    cli::cli_abort(
+      "Unsupported pretrained vocabulary token(s): {.val {unknown}}.",
+      class = "glyfp_error_unknown"
+    )
+  }
+  torch::with_no_grad({
+    # R torch tensor indices are one-based, while the original vocabulary is zero-based.
+    indices <- torch::torch_tensor(
+      tokens + 1L,
+      dtype = torch::torch_long(),
+      device = "cpu"
+    )
+    x <- torch::nnf_embedding(indices, weights[["item_embedding.weight"]])
+    for (layer in seq_len(3L)) {
+      aggregated <- torch::torch_zeros_like(x)
+      if (length(input$edges)) {
+        edges <- do.call(rbind, input$edges) + 1L
+        source <- torch::torch_tensor(
+          edges[, 1L],
+          dtype = torch::torch_long(),
+          device = "cpu"
+        )
+        target <- torch::torch_tensor(
+          edges[, 2L],
+          dtype = torch::torch_long(),
+          device = "cpu"
+        )
+        aggregated$index_add_(1L, target, x$index_select(1L, source))
+      }
+      prefix <- paste0("conv", layer)
+      x <- torch::nnf_linear(
+        aggregated,
+        weights[[paste0(prefix, ".lin_rel.weight")]],
+        weights[[paste0(prefix, ".lin_rel.bias")]]
+      ) +
+        torch::nnf_linear(x, weights[[paste0(prefix, ".lin_root.weight")]])
+      x <- torch::nnf_leaky_relu(x, negative_slope = 0.01)
+    }
+    x <- x$mean(dim = 1L, keepdim = TRUE)
+    for (layer in seq_len(2L)) {
+      x <- torch::nnf_linear(
+        x,
+        weights[[paste0("lin", layer, ".weight")]],
+        weights[[paste0("lin", layer, ".bias")]]
+      )
+      prefix <- paste0("bn", layer)
+      x <- torch::nnf_batch_norm(
+        x,
+        weights[[paste0(prefix, ".running_mean")]],
+        weights[[paste0(prefix, ".running_var")]],
+        weights[[paste0(prefix, ".weight")]],
+        weights[[paste0(prefix, ".bias")]],
+        training = FALSE,
+        eps = 1e-5
+      )
+      if (layer == 1L) x <- torch::nnf_leaky_relu(x, negative_slope = 0.01)
+    }
+    as.double(torch::as_array(x))
+  })
+}
+
+sweetnet_run <- function(inputs, checkpoint, metadata = NULL, fit = FALSE) {
+  # Both namespace startup and torch's C++ deserializer can initialize R's RNG.
+  restore_rng <- sweetnet_restore_rng()
+  on.exit(restore_rng(), add = TRUE)
+  sweetnet_dependencies()
+  current <- sweetnet_metadata()
+  if (!is.null(metadata) && !identical(metadata, current)) {
+    cli::cli_abort(
+      "Encoder model, preprocessing, code, or dependency metadata differs; restore the fitted environment.",
+      class = "glyfp_error_backend"
+    )
+  }
+  vocabulary <- sweetnet_vocabulary()
+  # Validate every token even for fitting, before evaluating any graph.
+  for (input in inputs) {
+    unknown <- setdiff(as.character(input$labels), names(vocabulary))
+    if (length(unknown)) {
+      cli::cli_abort(
+        "Unsupported pretrained vocabulary token(s): {.val {unknown}}.",
+        class = "glyfp_error_unknown"
+      )
+    }
+  }
+  weights <- sweetnet_load_weights(checkpoint)
+  embeddings <- if (fit) {
+    list()
+  } else {
+    lapply(inputs, sweetnet_infer, weights = weights, vocabulary = vocabulary)
+  }
+  list(metadata = current, embeddings = embeddings)
+}
+
+fit_sweetnet <- function(glycans, checkpoint, unknown, na_action) {
   if (!identical(unknown, "error")) {
     cli::cli_abort(
       "SweetNet supports only {.code unknown = 'error'}; untrained/unknown tokens cannot be ignored.",
       class = "glyfp_error_argument"
     )
   }
-  python <- sweetnet_path(python, "python", executable = TRUE)
   checkpoint <- sweetnet_path(checkpoint, "checkpoint")
   inputs <- sweetnet_inputs(unique(glycans[!is.na(glycans)]))
-  response <- sweetnet_run(inputs, python, checkpoint, fit = TRUE)
+  response <- sweetnet_run(inputs, checkpoint, fit = TRUE)
   structure(
     list(
       features = sweetnet_features(),
@@ -179,7 +346,6 @@ fit_sweetnet <- function(glycans, python, checkpoint, unknown, na_action) {
       params = list(
         unknown = unknown,
         na_action = na_action,
-        python = python,
         checkpoint = checkpoint,
         model = response$metadata
       ),
@@ -201,7 +367,6 @@ transform_sweetnet <- function(glycans, encoder) {
   # Even empty batches validate the fixed environment and artifact.
   response <- sweetnet_run(
     inputs,
-    encoder$params$python,
     encoder$params$checkpoint,
     metadata = encoder$params$model
   )
@@ -230,7 +395,7 @@ valid_sweetnet_params <- function(x) {
   is.list(x) &&
     identical(
       names(x),
-      c("unknown", "na_action", "python", "checkpoint", "model")
+      c("unknown", "na_action", "checkpoint", "model")
     ) &&
     identical(x$unknown, "error") &&
     is.character(x$na_action) &&
@@ -238,7 +403,7 @@ valid_sweetnet_params <- function(x) {
     !is.na(x$na_action) &&
     x$na_action %in% c("propagate", "error") &&
     all(vapply(
-      x[c("python", "checkpoint")],
+      x["checkpoint"],
       function(p) {
         is.character(p) && length(p) == 1L && !is.na(p) && nzchar(p)
       },

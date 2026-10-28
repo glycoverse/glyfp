@@ -15,7 +15,6 @@ fit_fingerprint(
   max_size = 3L,
   unknown = "ignore",
   na_action = "propagate",
-  python = Sys.getenv("GLYFP_PYTHON", "python3"),
   checkpoint = NULL
 )
 
@@ -53,13 +52,10 @@ and returns an all-NA vector at each missing input position (integer for
 substructures, double for SweetNet).
 \code{"error"} rejects missing glycans during either fitting or transformation.}
 
-\item{python}{For SweetNet only, a Python executable in an environment with
-the dependencies documented in the Get started guide. Defaults to environment
-variable \code{GLYFP_PYTHON}, or \code{"python3"}. No environment is installed automatically.}
-
 \item{checkpoint}{For SweetNet only, the local path to the supported official
 legacy \code{glycowork_sweetnet_species.pt} checkpoint. Required; its SHA-256 is
-verified before loading. No weights are downloaded automatically.}
+verified before loading. R torch reads a temporary CPU-relocated copy; the
+original file is unchanged. No weights are downloaded automatically.}
 
 \item{encoder}{An unmodified object returned by \code{fit_fingerprint()}.}
 }
@@ -126,17 +122,22 @@ preprocessing metadata match. Reusing one encoder is recommended.
 Unknown reducing-end anomers at the residue's inferred normal carbon position
 are omitted from the model input; this is glyrepr's default annotation for an
 unspecified reducing end. Explicit alpha/beta half-linkages, other reducing-end
-positions, and ambiguous internal linkages are rejected. Every model-parsed
-directed residue/linkage graph must be label-isomorphic to the glyrepr graph.
+positions, and ambiguous internal linkages are rejected. The directed
+residue/linkage graph is built directly from the glyrepr structure.
 No unknown model token is accepted. See \code{vignette("glyfp", package = "glyfp")}.
 
-The SweetNet encoder records local runtime/checkpoint paths, checkpoint and
-vocabulary SHA-256, preprocessing/readout, code hashes and dependency versions.
-Every transform validates these records. Restore the same paths/environment
-when loading an RDS; no Python process or model pointer is serialized. CPU
-evaluation uses one graph at a time, frozen normalization, disabled dropout,
-deterministic algorithms and one torch thread. Cross-platform comparisons
-should allow floating-point tolerance (tested at 1e-5).
+SweetNet runs entirely in R using the optional torch, digest, and zip packages.
+Its encoder records the local checkpoint path, checkpoint and vocabulary
+SHA-256, preprocessing/readout, R implementation hashes and the R torch version.
+Every transform validates these records. Restore the checkpoint at the same
+path when loading an RDS; no model pointers or weights are serialized.
+The supported official archive stores CUDA device tags. After verifying its
+exact hash, glyfp relocates only those tags to CPU in a temporary copy before
+calling \code{\link[torch:load_state_dict]{torch::load_state_dict()}}. Tensor storage bytes are unchanged.
+CPU evaluation uses float32 tensors, one graph at a time, frozen normalization,
+no dropout and no gradients, without changing the caller's thread settings.
+Cross-platform/runtime comparisons should allow floating-point tolerance
+(tested at a maximum absolute coordinate error of 1e-5).
 }
 \examples{
 library(glyrepr)

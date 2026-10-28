@@ -31,7 +31,7 @@ test_that("SweetNet normalization only removes unknown inferred half-linkages", 
   )
 })
 
-test_that("method-specific options are checked without Python", {
+test_that("method-specific options are checked without loading torch", {
   expect_error(
     fit_fingerprint("Gal", "sweetnet", max_size = 3),
     class = "glyfp_error_argument"
@@ -44,10 +44,7 @@ test_that("method-specific options are checked without Python", {
     fit_fingerprint("Gal", "sweetnet", unknown = "warn"),
     class = "glyfp_error_argument"
   )
-  expect_error(
-    fit_fingerprint("Gal", python = "missing-python"),
-    class = "glyfp_error_argument"
-  )
+  expect_false("python" %in% names(formals(fit_fingerprint)))
   expect_error(
     fit_fingerprint("Gal", checkpoint = "missing.pt"),
     class = "glyfp_error_argument"
@@ -63,13 +60,13 @@ test_that("method-specific options are checked without Python", {
 })
 
 test_that("pretrained SweetNet integration preserves the public contract", {
-  python <- Sys.getenv("GLYFP_TEST_PYTHON")
   checkpoint <- Sys.getenv("GLYFP_TEST_CHECKPOINT")
   skip_if(
-    !nzchar(python) || !nzchar(checkpoint),
-    "Set GLYFP_TEST_PYTHON and GLYFP_TEST_CHECKPOINT for offline pretrained integration."
+    !nzchar(checkpoint),
+    "Set GLYFP_TEST_CHECKPOINT for offline pretrained integration."
   )
-  skip_if_not_installed("jsonlite")
+  skip_if_not_installed("torch")
+  skip_if_not(torch::torch_is_installed(), "R torch runtime is not installed")
   x <- c(
     first = "Gal(b1-4)GlcNAc",
     branch = "Man(a1-3)[Man(a1-6)]Man",
@@ -78,7 +75,7 @@ test_that("pretrained SweetNet integration preserves the public contract", {
     duplicate = "Galb4GlcNAc?-"
   )
   object <- glyparse::auto_parse(x)
-  e <- fit_fingerprint(x, "sweetnet", python = python, checkpoint = checkpoint)
+  e <- fit_fingerprint(x, "sweetnet", checkpoint = checkpoint)
   fp <- transform_fingerprint(x, e)
   expect_type(fp, "list")
   expect_identical(names(fp), names(x))
@@ -131,14 +128,13 @@ test_that("pretrained SweetNet integration preserves the public contract", {
   expect_identical(transform_fingerprint(x[c(5, 2, 1)], e), fp[c(5, 2, 1)])
   expect_identical(transform_fingerprint(x[1], e), fp[1])
   expect_identical(
-    glycan_fingerprint(x, "sweetnet", python = python, checkpoint = checkpoint),
+    glycan_fingerprint(x, "sweetnet", checkpoint = checkpoint),
     fp
   )
   # Fit binds a pretrained coordinate space, not a vocabulary learned from x.
   empty <- fit_fingerprint(
     character(),
     "sweetnet",
-    python = python,
     checkpoint = checkpoint
   )
   expect_identical(e, empty)
@@ -174,7 +170,7 @@ test_that("pretrained SweetNet integration preserves the public contract", {
     class = "glyfp_error_backend"
   )
   changed <- e
-  changed$params$model$code_sha256[["glyfp.preprocessing"]] <- "changed"
+  changed$params$model$code_sha256[["preprocessing"]] <- "changed"
   expect_error(
     transform_fingerprint("Gal", changed),
     class = "glyfp_error_backend"
@@ -189,7 +185,48 @@ test_that("pretrained SweetNet integration preserves the public contract", {
   on.exit(unlink(broken), add = TRUE)
   writeLines("not model weights", broken)
   expect_error(
-    fit_fingerprint("Gal", "sweetnet", python = python, checkpoint = broken),
+    fit_fingerprint("Gal", "sweetnet", checkpoint = broken),
     class = "glyfp_error_backend"
+  )
+})
+
+test_that("native R inference agrees with the authors' model across glycan chemistry", {
+  checkpoint <- Sys.getenv("GLYFP_TEST_CHECKPOINT")
+  skip_if(
+    !nzchar(checkpoint),
+    "Set GLYFP_TEST_CHECKPOINT for pretrained parity checks"
+  )
+  skip_if_not_installed("torch")
+  skip_if_not(torch::torch_is_installed(), "R torch runtime is not installed")
+  fixture <- utils::read.csv(
+    test_path("fixtures", "sweetnet-reference.csv"),
+    check.names = FALSE
+  )
+  original_hash <- sweetnet_sha256(checkpoint)
+  original_time <- file.info(checkpoint)$mtime
+  threads <- torch::torch_get_num_threads()
+  set.seed(725)
+  rng <- .Random.seed
+  encoder <- fit_fingerprint(
+    fixture$glycan,
+    "sweetnet",
+    checkpoint = checkpoint
+  )
+  actual <- do.call(rbind, transform_fingerprint(fixture$glycan, encoder))
+  expected <- as.matrix(fixture[-1L])
+  # Absolute tolerance bounds every coordinate, including values near zero.
+  expect_lt(max(abs(actual - expected)), 1e-5)
+  expect_identical(sweetnet_sha256(checkpoint), original_hash)
+  expect_identical(file.info(checkpoint)$mtime, original_time)
+  expect_identical(torch::torch_get_num_threads(), threads)
+  expect_identical(.Random.seed, rng)
+  expect_identical(
+    transform_fingerprint(fixture$glycan, encoder),
+    transform_fingerprint(fixture$glycan, encoder)
+  )
+  expect_equal(
+    unname(transform_fingerprint("Man(a1-6)[Man(a1-3)]Man", encoder)[[1]]),
+    unname(transform_fingerprint("Man(a1-3)[Man(a1-6)]Man", encoder)[[1]]),
+    tolerance = 1e-6
   )
 })

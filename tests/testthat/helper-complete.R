@@ -25,8 +25,13 @@ check_embedding_contract <- function(method, checkpoint, inputs, expected) {
   before <- sweetnet_sha256(checkpoint)
   time <- file.info(checkpoint)$mtime
   x <- complete_reference(inputs)
-  run <- function(g) {
-    glycan_fingerprint(g, method, checkpoint = checkpoint, download = FALSE)
+  encode <- get(paste0("fp_", method))
+  run <- function(g, path = checkpoint) {
+    args <- list(glycans = g, checkpoint = path)
+    if (method == "sweetnet") {
+      args$download <- FALSE
+    }
+    do.call(encode, args)
   }
   fp <- run(x)
   expect_lt(max(abs(do.call(rbind, fp) - expected)), 1e-5)
@@ -50,7 +55,7 @@ check_embedding_contract <- function(method, checkpoint, inputs, expected) {
   expect_identical(readRDS(saved), output)
   writeLines("not weights", corrupt)
   expect_error(
-    glycan_fingerprint(x[1], method, checkpoint = corrupt),
+    run(x[1], path = corrupt),
     class = if (method == "sweetnet") {
       "glyfp_error_checksum"
     } else {

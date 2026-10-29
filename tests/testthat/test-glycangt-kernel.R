@@ -22,7 +22,7 @@ test_that("GlycanGT random policies reject invalid or stale configuration", {
   expect_error(glycangt_validate_policy(p), class = "glyfp_error_backend")
   # Missing checkpoints must fail before any optional backend or download.
   expect_error(
-    glycan_fingerprint("Gal", method = "glycangt"),
+    fp_glycangt("Gal"),
     class = "glyfp_error_argument"
   )
 })

@@ -1,5 +1,5 @@
 test_that("SweetNet named, local and offline paths give identical fingerprints", {
-  expect_identical(formals(glycan_fingerprint)$checkpoint, "sweetnet-v2")
+  expect_identical(formals(fp_sweetnet)$checkpoint, "sweetnet-v2")
   for (id in c("sweetnet-v1", "sweetnet-v2")) {
     path <- Sys.getenv(
       if (id == "sweetnet-v1") {
@@ -18,25 +18,22 @@ test_that("SweetNet named, local and offline paths give identical fingerprints",
       0L
     })
     x <- c("Gal(b1-4)GlcNAc(b1-", NA)
-    local <- glycan_fingerprint(
+    local <- fp_sweetnet(
       x,
-      "sweetnet",
       checkpoint = path,
       download = FALSE
     )
     expect_identical(
-      suppressMessages(glycan_fingerprint(
+      suppressMessages(fp_sweetnet(
         x,
-        "sweetnet",
         checkpoint = id,
         cache_dir = cache
       )),
       local
     )
     expect_identical(
-      glycan_fingerprint(
+      fp_sweetnet(
         x,
-        "sweetnet",
         checkpoint = id,
         cache_dir = cache,
         download = FALSE
@@ -46,15 +43,14 @@ test_that("SweetNet named, local and offline paths give identical fingerprints",
     expect_identical(calls, 1L)
     if (id == "sweetnet-v2") {
       expect_identical(
-        glycan_fingerprint(x, "sweetnet", cache_dir = cache),
+        fp_sweetnet(x, cache_dir = cache),
         local
       )
     }
     unlink(cache, recursive = TRUE)
     expect_error(
-      glycan_fingerprint(
+      fp_sweetnet(
         x,
-        "sweetnet",
         checkpoint = id,
         cache_dir = cache,
         download = FALSE
@@ -63,9 +59,8 @@ test_that("SweetNet named, local and offline paths give identical fingerprints",
     )
     expect_false(dir.exists(cache))
     expect_identical(
-      suppressMessages(glycan_fingerprint(
+      suppressMessages(fp_sweetnet(
         x,
-        "sweetnet",
         checkpoint = id,
         cache_dir = cache
       )),

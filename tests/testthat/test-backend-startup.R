@@ -36,8 +36,8 @@ test_that("structural methods do not load torch in a fresh R process", {
       # Isolate optional backend startup from igraph, which initializes an absent
       # R RNG state during graph parsing. Build the graph before clearing it.
       inputs <- glyfp:::sweetnet_inputs(glyparse::auto_parse("Gal"))
-      glyfp::glycan_fingerprint("Gal(b1-", "substructure_binary")
-      glyfp::glycan_fingerprint("Gal(b1-", "substructure_count")
+      glyfp::fp_motif_binary("Gal(b1-")
+      glyfp::fp_motif_count("Gal(b1-")
       !"torch" %in% loadedNamespaces()
     },
     args = list(package = getNamespaceInfo("glyfp", "path")),

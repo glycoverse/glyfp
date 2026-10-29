@@ -1,65 +1,61 @@
 test_that("model options and local-only checkpoints are enforced", {
+  local_mocked_bindings(sweetnet_dependencies = function() NULL)
   local_mocked_bindings(
     download.file = function(...) stop("Unexpected network"),
     .package = "utils"
   )
   x <- "Gal(b1-4)GlcNAc(b1-"
-  for (method in c("sweetnet", "glycangt", "gifflar")) {
+  for (encode in list(fp_sweetnet, fp_glycangt, fp_gifflar)) {
     for (opts in list(
       list(max_size = 2),
-      list(unknown = "ignore"),
-      list(unknown = "warn"),
-      list(download = NA),
-      list(cache_dir = NULL)
+      list(unknown = "error"),
+      list(method = "sweetnet")
     )) {
       expect_error(
-        do.call(
-          glycan_fingerprint,
-          c(list(x, method, checkpoint = "local.pt"), opts)
-        ),
-        class = "glyfp_error_argument"
+        do.call(encode, c(list(x, checkpoint = "local.pt"), opts)),
+        "must be empty"
       )
     }
     for (path in list(NULL, NA_character_, character(), "")) {
-      expect_error(
-        glycan_fingerprint(x, method, checkpoint = path),
-        class = "glyfp_error_argument"
-      )
+      expect_error(encode(x, checkpoint = path), class = "glyfp_error_argument")
     }
     expect_error(
-      glycan_fingerprint(
-        NA_character_,
-        method,
-        checkpoint = "local.pt",
-        na_action = "error"
-      ),
+      encode(NA_character_, checkpoint = "local.pt", na_action = "error"),
       class = "glyfp_error_missing"
     )
-  }
-  for (method in c("glycangt", "gifflar")) {
-    expect_error(glycan_fingerprint(x, method), class = "glyfp_error_argument")
     expect_error(
-      glycan_fingerprint(x, method, checkpoint = tempfile()),
+      encode(x, checkpoint = "local.pt", na_action = "drop"),
+      class = "glyfp_error_argument"
+    )
+  }
+  expect_error(fp_sweetnet(x, download = NA), class = "glyfp_error_argument")
+  expect_error(fp_sweetnet(x, cache_dir = NULL), class = "glyfp_error_argument")
+  for (encode in list(fp_glycangt, fp_gifflar)) {
+    expect_error(encode(x), class = "glyfp_error_argument")
+    expect_error(
+      encode(x, checkpoint = tempfile()),
       class = "glyfp_error_backend"
     )
     expect_error(
-      glycan_fingerprint(
-        x,
-        method,
-        checkpoint = "https://example.org/model.pt"
-      ),
+      encode(x, checkpoint = "https://example.org/model.pt"),
       class = "glyfp_error_argument"
     )
-    expect_error(
-      glycan_fingerprint(x, method, checkpoint = "local.pt", download = TRUE),
-      class = "glyfp_error_argument"
-    )
+    for (opts in list(
+      list(download = TRUE),
+      list(download = FALSE),
+      list(cache_dir = tempfile())
+    )) {
+      expect_error(
+        do.call(encode, c(list(x, checkpoint = "local.pt"), opts)),
+        "must be empty"
+      )
+    }
   }
-  expect_error(
-    glycan_fingerprint(x, checkpoint = "model.pt"),
-    class = "glyfp_error_argument"
-  )
-  expect_false("python" %in% names(formals(glycan_fingerprint)))
+  for (encode in list(fp_motif_binary, fp_motif_count)) {
+    expect_error(encode(x, checkpoint = "model.pt"), "must be empty")
+    expect_error(encode(x, download = FALSE), "must be empty")
+    expect_error(encode(x, cache_dir = tempfile()), "must be empty")
+  }
 })
 
 for (model in c("sweetnet-v1", "sweetnet-v2", "glycangt", "gifflar")) {

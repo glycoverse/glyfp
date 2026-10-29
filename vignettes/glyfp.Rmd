@@ -7,20 +7,33 @@ vignette: >
   %\VignetteEncoding{UTF-8}
 ---
 
-The glyfp package provides one function, `glycan_fingerprint()`, for structural
-fingerprints and pretrained glycan representations. It returns a list of named
-vectors, one per input glycan. Inputs can be glyrepr structure vectors or text
-in formats supported by glyparse.
+The glyfp package provides a separate function for each structural fingerprint
+or pretrained glycan representation. Each returns a list of named vectors,
+one per input glycan, and exposes only options relevant to its method. Inputs can
+be glyrepr structure vectors or text in formats supported by glyparse.
 
 ## Choose a method
 
-| Method | Coordinates | Source of features |
+| Function | Coordinates | Source of features |
 |---|---|---|
-| `substructure_binary` (default) | Presence/absence; 3,173 dimensions by default | Fixed glydb motif dictionary |
-| `substructure_count` | Overlapping occurrences; same dimensions | Same fixed dictionary |
-| `sweetnet` | 128 pretrained features | SweetNet v2 by default; legacy v1 also supported |
-| `glycangt` | 768 pretrained graph Transformer features | Large mask-35 model; local checkpoint required |
-| `gifflar` | 384 pretrained molecular graph features | Species model; local checkpoint required |
+| `fp_motif_binary()` | Presence/absence; 3,173 dimensions by default | Fixed glydb motif dictionary |
+| `fp_motif_count()` | Overlapping occurrences; same dimensions | Same fixed dictionary |
+| `fp_sweetnet()` | 128 pretrained features | SweetNet v2 by default; legacy v1 also supported |
+| `fp_glycangt()` | 768 pretrained graph Transformer features | Large mask-35 model; local checkpoint required |
+| `fp_gifflar()` | 384 pretrained molecular graph features | Species model; local checkpoint required |
+
+### Migrating existing calls
+
+The former `glycan_fingerprint()` interface has been replaced by these functions.
+For example, replace `glycan_fingerprint(x, "substructure_count", max_size = 2)`
+with `fp_motif_count(x, max_size = 2)`, and `glycan_fingerprint(x, "sweetnet")`
+with `fp_sweetnet(x)`. Default calls `glycan_fingerprint(x)` become
+`fp_motif_binary(x)`. The resulting vectors and defaults are unchanged.
+
+`max_size` and `unknown` belong to the two motif functions. Only `fp_sweetnet()`
+accepts `cache_dir` and `download`. For GlycanGT and GIFFLAR, pass the required
+local `checkpoint` and omit any former `download = FALSE` argument. All five
+functions accept `na_action`; embedding functions always reject unknown tokens.
 
 Every method processes complete structures. Specify concrete residues, all
 linkage positions and anomers, substituent positions, and the reducing-end
@@ -41,11 +54,11 @@ knitr::opts_chunk$set(collapse=TRUE, comment="#>")
 library(glyfp)
 a <- c("Galb3Galb3Galb-", "Galb-")
 b <- c("Gal(b1-4)GlcNAc(b1-", NA_character_)
-fp_a <- glycan_fingerprint(a, "substructure_count")
-fp_b <- glycan_fingerprint(b, "substructure_count")
+fp_a <- fp_motif_count(a)
+fp_b <- fp_motif_count(b)
 lengths(fp_a)
 stopifnot(identical(c(fp_a, fp_b),
-                   glycan_fingerprint(c(a, b), "substructure_count")))
+                   fp_motif_count(c(a, b))))
 ```
 
 The same glycan receives the same coordinates alone, in another batch, or in
@@ -54,7 +67,7 @@ delegated to glyparse; equivalent objects yield the same values.
 
 ```{r}
 objects <- glyparse::auto_parse(a)
-stopifnot(identical(glycan_fingerprint(objects, "substructure_count"), fp_a))
+stopifnot(identical(fp_motif_count(objects), fp_a))
 fp_a[[1]][c("Gal(b1-", "Gal(b1-3)Gal(b1-")]
 ```
 
@@ -64,7 +77,7 @@ Symmetric mappings of the same residue set count once. Binary fingerprints are
 `as.integer(count > 0)`. Reducing-end alpha/beta information is retained:
 
 ```{r}
-ends <- glycan_fingerprint(c("Gal(a1-", "Gal(b1-"))
+ends <- fp_motif_binary(c("Gal(a1-", "Gal(b1-"))
 lapply(ends, function(x) x[c("Gal(a1-", "Gal(b1-")])
 ```
 
@@ -110,8 +123,8 @@ different coordinate sets. Save the method, options and glyfp version alongside
 results; recompute compared fingerprints after a dictionary change.
 
 ```{r}
-stopifnot(length(glycan_fingerprint(character())) == 0L)
-missing <- glycan_fingerprint(NA_character_)[[1]]
+stopifnot(length(fp_motif_binary(character())) == 0L)
+missing <- fp_motif_binary(NA_character_)[[1]]
 stopifnot(length(missing) == 3173L, all(is.na(missing)))
 path <- tempfile(fileext=".rds")
 saveRDS(fp_a, path)
@@ -150,7 +163,7 @@ error by `1e-5`. All-NA inputs retain the model's full coordinate set.
 ### SweetNet
 
 [SweetNet (2021)](https://doi.org/10.1016/j.celrep.2021.109251) is a graph neural
-network over residues and linkages. `method = "sweetnet"` defaults to v2 and
+network over residues and linkages. `fp_sweetnet()` defaults to v2 and
 returns 128 coordinates from `bn2(lin2(...))`, before final activation, dropout
 and classification.
 
@@ -165,11 +178,11 @@ run_sweetnet <- identical(Sys.getenv("GLYFP_RUN_MODEL_EXAMPLES"), "true")
 
 ```{r, eval=run_sweetnet}
 a <- c("Gal(b1-4)GlcNAc(b1-", "GlcNAc(b1-", NA_character_)
-fp <- glycan_fingerprint(a, "sweetnet")
+fp <- fp_sweetnet(a)
 lengths(fp)
-offline <- glycan_fingerprint(a, "sweetnet", download = FALSE)
+offline <- fp_sweetnet(a, download = FALSE)
 stopifnot(identical(fp, offline))
-legacy <- glycan_fingerprint(a, "sweetnet", checkpoint = "sweetnet-v1")
+legacy <- fp_sweetnet(a, checkpoint = "sweetnet-v1")
 ```
 
 | Checkpoint | Model |
@@ -185,7 +198,7 @@ prevents network access and errors on an offline cache miss. A local file is
 never replaced or copied to a persistent cache:
 
 ```{r, eval=FALSE}
-fp <- glycan_fingerprint(a, "sweetnet",
+fp <- fp_sweetnet(a,
   checkpoint = "/path/to/glycowork_sweetnet_species_v2.pt", download = FALSE)
 ```
 
@@ -204,7 +217,8 @@ Supported MIT-licensed official artifacts:
   SHA-256 `4ee19fc0593db0562c16585b556050694144816754750ebfe1876ed21ba0f4be`.
 
 Every residue/substituent/linkage token must be in the fixed vocabulary.
-`unknown = "error"` is the only embedding policy; no untrained token is used.
+Embedding functions always reject unknown tokens; no untrained token is used.
+The configurable `unknown` argument belongs only to motif functions.
 
 ### GlycanGT
 
@@ -220,9 +234,9 @@ download `outputs/mask_35/pretrained_tokengt_large_multitask_mask_35_final.pt`
 separate step. Do not put account credentials into R code.
 
 ```{r, eval=FALSE}
-fp <- glycan_fingerprint(
+fp <- fp_glycangt(
   c("Gal(b1-4)GlcNAc(b1-", "Man(a1-3)[Man(a1-6)]Man(a1-"),
-  "glycangt", checkpoint = "/path/to/pretrained_tokengt_large_multitask_mask_35_final.pt")
+  checkpoint = "/path/to/pretrained_tokengt_large_multitask_mask_35_final.pt")
 lengths(fp) # 768 768
 ```
 
@@ -230,8 +244,8 @@ The supported Hugging Face revision is
 `7c9f4a19b366ca48ed03995a0ad47fa1e745f24c`, SHA-256
 `d490d18795ee6d4746b9b4abd0a5c733d8f7e4261998d050c1b741b65e530a54`.
 Code follows [the fixed official implementation](https://github.com/matsui-lab/GlycanGT/tree/96611518c971deb89215ca163deaf9de3a59fa32).
-Omitting the local checkpoint, supplying a URL, requesting `download = TRUE`,
-or setting `cache_dir` produces an error. `download = FALSE` is accepted.
+Omitting the local checkpoint or supplying a URL produces an error.
+`fp_glycangt()` has no `download` or `cache_dir` argument.
 Every call hashes the original file, even with tensors cached in memory. CUDA
 tags are relocated in a temporary CPU copy without changing the original file.
 
@@ -263,11 +277,11 @@ The code and model card declare MIT licensing. glyfp requires a local file and
 never downloads GIFFLAR weights. SHA-256:
 `0dab7c3b61aad95dab37d4974da4b57b3fd985128dc09ad5da846e82adb9519d`.
 Every call verifies it, including when tensors are already cached in memory.
-`cache_dir` and `download = TRUE` are unsupported; `download = FALSE` is accepted.
+`fp_gifflar()` has no `cache_dir` or `download` argument.
 
 ```{r, eval=FALSE}
-fp <- glycan_fingerprint(c("GlcNAc(b1-", "Gal6S(b1-4)GlcNAc(b1-", NA_character_),
-  "gifflar", checkpoint = "/path/to/glycowork_gifflar_species.pt")
+fp <- fp_gifflar(c("GlcNAc(b1-", "Gal6S(b1-4)GlcNAc(b1-", NA_character_),
+  checkpoint = "/path/to/glycowork_gifflar_species.pt")
 lengths(fp) # 384 384 384
 ```
 

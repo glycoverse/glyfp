@@ -37,7 +37,7 @@ jobs:
           dir.create("docs/vignettes", showWarnings = FALSE)
           dir.create("docs/man", showWarnings = FALSE)
           stopifnot(file.copy("vignettes/glyfp.Rmd", "docs/vignettes", overwrite = TRUE))
-          stopifnot(file.copy("man/glycan_fingerprint.Rd", "docs/man", overwrite = TRUE))
+          stopifnot(file.copy(list.files("man", pattern = "[.]Rd$", full.names = TRUE), "docs/man", overwrite = TRUE))
       - uses: actions/upload-artifact@v7
         with:
           name: pkgdown-site

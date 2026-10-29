@@ -5,7 +5,10 @@ development:
 reference:
 - title: Glycan fingerprints
   contents:
-  - glycan_fingerprint
+  - fp_motif_count
+  - fp_sweetnet
+  - fp_glycangt
+  - fp_gifflar
 articles:
 - title: Getting started
   navbar: ~

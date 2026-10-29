@@ -94,7 +94,7 @@ motif_features <- function(max_size) {
   dictionary$motif[dictionary$size <= max_size]
 }
 
-motif_fingerprints <- function(glycans, method, max_size, unknown) {
+motif_fingerprints <- function(glycans, max_size, unknown, binary) {
   features <- motif_features(max_size)
   valid <- which(!is.na(glycans))
   unique_glycans <- unique(glycans[valid])
@@ -125,7 +125,7 @@ motif_fingerprints <- function(glycans, method, max_size, unknown) {
       mode = "strict"
     )
   }
-  if (method == "substructure_binary") {
+  if (binary) {
     counts <- 1L * (counts > 0L)
   }
   result <- lapply(seq_along(glycans), function(i) {

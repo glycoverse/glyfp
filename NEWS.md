@@ -8,3 +8,5 @@
 * Named checkpoints download from pinned official sources on first use, verify SHA-256, and reuse a per-user cache. `download = FALSE` supports offline use, and `checkpoint` still accepts verified local files.
 
 * `method = "glycangt"` computes 768-dimensional pretrained graph Transformer embeddings entirely in R. It requires a manually downloaded official local checkpoint and never downloads weights. Encoders fix the model identity, vocabulary and deterministic per-glycan orthogonal node identifiers across batches.
+
+* `method = "gifflar"` adds 384-dimensional pretrained molecular graph embeddings using R torch and 27 fixed residue templates. It requires a verified local checkpoint, preserves atom, bond, ring and directed linkage information, and does not require Python or a chemistry toolkit.

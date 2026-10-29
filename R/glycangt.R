@@ -244,7 +244,7 @@ glycangt_run <- function(inputs, weights, config, policy) {
   restore_rng <- sweetnet_restore_rng()
   on.exit(restore_rng(), add = TRUE)
   # Weights are explicitly supplied by internal callers; this function neither
-  # downloads nor constructs a model. The pretrained adapter is pending access.
+  # downloads nor constructs a model. The public adapter verifies local weights.
   glycangt_validate_policy(policy)
   glycangt_validate_weights(weights, config)
   lapply(inputs, function(input) {

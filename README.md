@@ -17,8 +17,8 @@ coverage](https://codecov.io/gh/glycoverse/glyfp/graph/badge.svg)](https://app.c
 The glyfp package represents glycans as fingerprints for comparison and
 modeling. It provides binary and count fingerprints of connected glycan
 substructures, reusable encoders for multiple batches, and optional
-pretrained SweetNet and GlycanGT embeddings. Inputs can be glyrepr
-structures or text in formats supported by glyparse.
+pretrained SweetNet, GlycanGT and GIFFLAR embeddings. Inputs can be
+glyrepr structures or text in formats supported by glyparse.
 
 ## Installation
 

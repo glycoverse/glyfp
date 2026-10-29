@@ -19,6 +19,7 @@ text supported by glyparse. Both encoding functions return only a list of vector
 | `substructure_count` | Number of overlapping motif occurrences | Learns the same motif dictionary |
 | `sweetnet` | 128 pretrained latent features | Binds and validates a fixed model, vocabulary and preprocessing |
 | `glycangt` | 768 pretrained graph Transformer features | Binds a user-supplied local checkpoint and a fixed random-identifier policy |
+| `gifflar` | 384 pretrained molecular graph features | Binds a local checkpoint, fixed residue templates and atom/bond/residue preprocessing |
 
 The sections below use the same three functions: `glycan_fingerprint()`,
 `fit_fingerprint()`, and `transform_fingerprint()`.
@@ -321,3 +322,83 @@ checked against the official pretrained model on 12 glycans and all 768 coordina
 with a maximum absolute tolerance of 1e-5. Ordinary tests need no network; the real
 integration suite uses developer-only `GLYFP_TEST_GLYCANGT_CHECKPOINT` to locate an
 already downloaded local artifact.
+
+## Pretrained GIFFLAR embeddings
+
+[GIFFLAR](https://arxiv.org/abs/2409.13467) combines atom, bond and monosaccharide
+information through heterogeneous message passing. glyfp implements the current
+[glycowork network and molecular graph builder](https://github.com/BojarLab/glycowork/tree/199efdde6bc137dbbcd900f84f927fdbbca52eae)
+in R. It uses the official species checkpoint and returns 384 coordinates: the
+concatenated means of the three node types. These are graph embeddings, not the
+1,076 classification scores. No Python, RDKit or GlyLES runtime is needed.
+
+### Local weights
+
+Download `glycowork_gifflar_species.pt` (about 7.8 MB) from the
+[official fixed model revision](https://huggingface.co/DBojar/glycowork_models/tree/52187c054b9c988ddb2a5a5af9ee64b51004fd1e).
+The code and model card declare MIT licensing. Pass the downloaded local file
+explicitly; glyfp does not download GIFFLAR weights or use an environment variable
+to find them. SweetNet's named-checkpoint download policy is unchanged.
+
+```{r, eval=FALSE}
+checkpoint <- "/path/to/glycowork_gifflar_species.pt"
+encoder <- fit_fingerprint(
+  c("Gal(b1-4)GlcNAc", "Neu5Ac(a2-3)Gal(b1-4)GlcNAc"),
+  method = "gifflar", checkpoint = checkpoint
+)
+fp <- transform_fingerprint(c("GlcNAc", "Gal6S(b1-4)GlcNAc", NA_character_), encoder)
+lengths(fp) # 384 384 384
+```
+
+The supported checkpoint has SHA-256
+`0dab7c3b61aad95dab37d4974da4b57b3fd985128dc09ad5da846e82adb9519d`.
+Every call checks the original file, including when tensors are already cached in
+memory. Missing, changed or unsupported files produce an error. No persistent
+copy is made. `cache_dir` and `download = TRUE` are unsupported for this method;
+`download = FALSE` is accepted. Loading glyfp neither installs torch nor accesses
+the network; install the optional R torch runtime explicitly as described above.
+
+### Supported chemistry and comparability
+
+The first native adapter supports these 27 fixed residue labels:
+
+| Group | Residues |
+|:--|:--|
+| Unmodified residues | Glc, Gal, Man, Fuc, Xyl, Rha, Rib, Ara |
+| Amino and N-acetyl residues | GlcN, GalN, GlcNAc, GalNAc, ManNAc |
+| Uronic and sialic acids | GlcA, GalA, IdoA, Neu5Ac, Neu5Gc, Kdn |
+| Positioned sulfates | Gal6S, GlcNAc6S, GlcNAc3S, GalNAc4S, GalNAc6S, IdoA2S |
+| Positioned phosphates | Glc6P, Man6P |
+
+Internal linkages must specify the anomer and both carbon positions. The reducing
+end must have its usual inferred carbon and unspecified anomer, as in the
+examples. Monosaccharides are supported. Other residue templates, unknown
+positions, explicit reducing-end alpha/beta states, anomeric-to-anomeric bonds,
+and attachments that would move or extend a modification are rejected. For
+example, a child on position 2 of GlcN or position 6 of Glc6P is not supported.
+There is no fallback to an approximate molecular structure. `unknown = "error"`
+is the only supported policy. If glyparse cannot infer the format of a short
+text such as `Ara`, provide an explicit glyrepr serialization (`Ara(?1-`) or a
+structure object constructed with the corresponding ecosystem parser.
+
+The molecular graph retains the official atom/chirality features, bond ownership,
+ring relations, and separate donor-to-acceptor and acceptor-to-donor linkage
+features. As in the official network, bond order and charge are not separate
+input features. The three means are pooled independently so that the greater
+number of atoms does not change the residue pool's contribution.
+
+The encoder fixes checkpoint, vocabulary, residue-template hashes, preprocessing,
+readout, CPU float32 execution, and dependency versions. Inference uses evaluation
+mode, no random identifiers and one glycan per forward pass. Input order, duplicate
+glycans and splitting a batch do not change coordinates. Empty/all-NA fitting
+still binds the full 384 coordinates; missing values yield all-NA double vectors.
+`saveRDS()` stores metadata rather than weights or external pointers; retain the
+local checkpoint at its recorded path. Do not combine these coordinates with
+SweetNet, GlycanGT or another GIFFLAR version.
+
+The native molecular graphs and predictions were checked against the pinned
+upstream code on 86 structures, covering every supported residue and both
+linkage anomers. Numerical comparisons use a maximum absolute tolerance of 1e-5.
+Ordinary tests validate the molecular graphs and a deliberately small untrained
+network without a checkpoint or network access. The developer integration suite
+uses `GLYFP_TEST_GIFFLAR_CHECKPOINT` to locate the real downloaded weights.

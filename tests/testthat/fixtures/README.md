@@ -56,3 +56,21 @@ Selected original source SHA-256 values:
 - tokengt_graph_encoder.py: 18ab384e1ace0dbb4f6489ccb36d6c6f10ed79db01552d603449ac14da5617a3
 - tokengt_graph_encoder_layer.py: ce54a9d46a7a93cb01136976243fd9ee8bd74359c031b92c9b5ff6a689da1a3c
 - multihead_attention.py: 872c4851bc72252a4e1a25468c09d55712fd075186a30fa343d81f969d3b4604
+
+`glycangt-reference.csv` contains independent CPU outputs from the **official
+pretrained large mask-35 checkpoint**, not the small untrained fixture above.
+It covers 12 multi-residue glycans and all 768 coordinates, including branched,
+sialylated, fucosylated and sulfated structures and an eight-residue chain.
+Official weight SHA-256:
+d490d18795ee6d4746b9b4abd0a5c733d8f7e4261998d050c1b741b65e530a54
+
+The reference uses the unchanged public GlycanGT definitions at commit
+96611518c971deb89215ca163deaf9de3a59fa32, the full large configuration and all
+202 official state-dict entries loaded strictly. Public graph-to-triples code
+with the authors' specified glycowork 1.6.2 parser independently verifies node
+and directed edge identities. The reference model receives the upstream edge
+order. Evaluation uses PyTorch 2.8.0, float32, CPU, no gradients and batch size1,
+with graph-derived seeds recorded alongside each canonical input. Both original
+vocabulary JSON blobs match the pinned Hugging Face repository metadata exactly.
+This tests numerical equivalence under the recorded ORF policy; it does not
+reproduce stochastic larger minibatches or claim downstream benchmark accuracy.

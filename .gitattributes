@@ -1,3 +1,6 @@
 /inst/extdata/sweetnet-vocabulary.tsv text eol=lf
 /tests/testthat/fixtures/sweetnet-reference.csv text eol=lf
 /tests/testthat/fixtures/sweetnet-v2-reference.csv text eol=lf
+
+/inst/extdata/glycangt-*.tsv text eol=lf
+/tests/testthat/fixtures/glycangt-reference.csv text eol=lf

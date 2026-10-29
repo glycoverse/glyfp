@@ -6,7 +6,7 @@ Description: Encodes glycan structures as binary or count vectors of connected
     residue substructures. Learns explicit feature dictionaries and reuses them
     across batches, preserving residue identities, substituents, and glycosidic
     linkage labels from 'glyrepr' structures. Optionally computes pretrained
-    'SweetNet' embeddings using 'torch' for R on the CPU and verified local
+    'SweetNet' and 'GlycanGT' embeddings using 'torch' for R on the CPU and verified local
     model weights.
 License: MIT + file LICENSE
 Depends: R (>= 4.1)

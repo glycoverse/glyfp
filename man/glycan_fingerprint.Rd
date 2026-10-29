@@ -17,7 +17,7 @@ fit_fingerprint(
   na_action = "propagate",
   checkpoint = "sweetnet-v2",
   cache_dir = tools::R_user_dir("glyfp", "cache"),
-  download = TRUE
+  download = identical(method, "sweetnet")
 )
 
 transform_fingerprint(glycans, encoder)
@@ -31,7 +31,8 @@ the corresponding glyparse parser first. Invalid text raises a parse error.}
 
 \item{method}{Either \code{"substructure_binary"} (default, presence/absence) or
 \code{"substructure_count"} (number of occurrences), or \code{"sweetnet"} (optional
-pretrained 128-dimensional CPU embedding).}
+pretrained 128-dimensional CPU embedding), or \code{"glycangt"} (pretrained
+768-dimensional CPU graph Transformer with user-supplied local weights).}
 
 \item{...}{For \code{glycan_fingerprint()}, named options forwarded to
 \code{fit_fingerprint()}, such as \code{max_size}, \code{unknown}, and \code{na_action}.
@@ -41,17 +42,17 @@ Options after \code{...} must be named.}
 \item{max_size}{Maximum number of residues per connected substructure, an
 integer from 1 to 7. Includes all sizes from 1 through this maximum.
 Defaults to 3, including mono-, di-, and branched trisaccharides. Applies
-only to substructure methods; supplying it for SweetNet is an error.}
+only to substructure methods; supplying it for an embedding method is an error.}
 
 \item{unknown}{How transform handles features absent from the fitted
 dictionary: \code{"ignore"} (default), \code{"warn"}, or \code{"error"}. Unknown features
-never add dimensions. Warnings are issued once per batch. SweetNet defaults
-to \code{"error"} and supports only that policy: tokens outside its fixed pretrained
+never add dimensions. Warnings are issued once per batch. Embedding methods default
+to \code{"error"} and support only that policy: tokens outside their fixed pretrained
 vocabulary are rejected, not ignored or assigned untrained representations.}
 
 \item{na_action}{\code{"propagate"} (default) excludes missing glycans from fitting
 and returns an all-NA vector at each missing input position (integer for
-substructures, double for SweetNet).
+substructures, double for embeddings).
 \code{"error"} rejects missing glycans during either fitting or transformation.}
 
 \item{checkpoint}{For SweetNet, \code{"sweetnet-v2"} (default), \code{"sweetnet-v1"}
@@ -59,29 +60,36 @@ substructures, double for SweetNet).
 checkpoints are downloaded from a fixed official revision on first use and
 verified with SHA-256 before caching or loading. Local files are identified
 by hash and never replaced or downloaded. Both models return 128 coordinates,
-but their coordinate spaces differ. This option applies only to SweetNet.}
+but their coordinate spaces differ. For GlycanGT, an explicit local path to
+\code{pretrained_tokengt_large_multitask_mask_35_final.pt} is required. Download it
+yourself from the official Hugging Face model repository after obtaining
+access. glyfp never downloads GlycanGT files and accepts only the fixed
+official artifact, identified by SHA-256, regardless of filename.}
 
 \item{cache_dir}{Directory for named SweetNet checkpoints. Defaults to the
 per-user cache returned by \code{tools::R_user_dir("glyfp", "cache")}. No directory
-is created for a local checkpoint or an offline cache miss.}
+is created for a local checkpoint or an offline cache miss. This argument
+applies only to SweetNet; supplying it for GlycanGT is an error.}
 
-\item{download}{Whether a missing named checkpoint may be downloaded (default
-\code{TRUE}). Set \code{FALSE} for offline use; a verified cache entry or local file is
+\item{download}{Whether a missing named SweetNet checkpoint may be downloaded
+(defaults to \code{TRUE} for SweetNet and \code{FALSE} otherwise). Set \code{FALSE} for offline use; a verified cache entry or local file is
 then required. Corrupt cache files are rejected, never silently overwritten.
-This policy and the cache directory are stored in the encoder and reused
+GlycanGT never downloads weights; explicitly supplying \code{TRUE} is an error.
+For SweetNet, this policy and the cache directory are stored in the encoder and reused
 during transformation. Loading the package does not access the network.}
 
 \item{encoder}{An unmodified object returned by \code{fit_fingerprint()}.}
 }
 \value{
 \code{glycan_fingerprint()} and \code{transform_fingerprint()} return a list
-of named integer vectors (substructures) or double vectors (SweetNet), with
+of named integer vectors (substructures) or double vectors (embeddings), with
 the same length, order, and names as \code{glycans}. Missing SweetNet inputs yield
-128 \code{NA_real_} values.
+128 \code{NA_real_} values; missing GlycanGT inputs yield 768.
 All vectors use \code{encoder$features} as their names, including zero entries.
 \code{fit_fingerprint()} returns a \code{glyfp_encoder} list containing \code{features},
 \code{method}, \code{params}, \code{schema_version}, and \code{versions}. For SweetNet, \code{features}
-are \code{sweetnet_001} through \code{sweetnet_128}; \code{params$model} fixes model metadata.
+are \code{sweetnet_001} through \code{sweetnet_128}; for GlycanGT they are
+\code{glycangt_001} through \code{glycangt_768}. \code{params$model} fixes model metadata.
 }
 \description{
 \code{glycan_fingerprint()} fits a dictionary on the supplied batch, then transforms
@@ -158,6 +166,25 @@ CPU evaluation uses float32 tensors, one graph at a time, frozen normalization,
 no dropout and no gradients, without changing the caller's thread settings.
 Cross-platform/runtime comparisons should allow floating-point tolerance
 (tested at a maximum absolute coordinate error of 1e-5).
+
+GlycanGT uses the official large model trained with 35\% node-and-edge masking,
+with a 768-dimensional final graph-token readout. Fitting binds local weights,
+vocabulary and preprocessing, without training. It currently supports at least
+two residues, fully specified internal linkages and an unspecified normal
+reducing end. Unknown tokens, single residues and unsupported chemistry are
+rejected. No automatic download or runtime installation occurs.
+
+The GlycanGT encoder records the master seed (1729), graph-derived seed rule,
+ORF width (64), float32 dtype, canonical node order and single-graph batching.
+Orthogonal random node identifiers follow the official one-graph Gaussian QR
+construction and are fixed per canonical glycan, preserving the caller's R
+and CPU torch RNG state. This makes duplicates, reordering and separate batches
+reproducible. Upstream multi-graph batches use their maximum node count when
+constructing identifiers, so their outputs can differ from this fixed policy.
+This adapter does not claim to reproduce published downstream performance.
+Keep the serialized encoder and local checkpoint together. A changed model,
+identifier policy, vocabulary, implementation or dependency version requires
+recomputing all compared embeddings. No weights or model pointers are serialized.
 }
 \examples{
 library(glyrepr)

@@ -1,5 +1,4 @@
-# Internal GlycanGT inference building blocks. Not registered as a public method
-# until the gated pretrained checkpoint has passed numerical validation.
+# Native GlycanGT inference building blocks for the verified local checkpoint.
 # Adapted under Apache-2.0; see inst/licenses/GlycanGT-LICENSE.
 # Architecture: matsui-lab/GlycanGT 96611518c971deb89215ca163deaf9de3a59fa32.
 

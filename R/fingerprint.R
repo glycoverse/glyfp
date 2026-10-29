@@ -13,7 +13,8 @@
 #'   the corresponding glyparse parser first. Invalid text raises a parse error.
 #' @param method Either `"substructure_binary"` (default, presence/absence) or
 #'   `"substructure_count"` (number of occurrences), or `"sweetnet"` (optional
-#'   pretrained 128-dimensional CPU embedding).
+#'   pretrained 128-dimensional CPU embedding), or `"glycangt"` (pretrained
+#'   768-dimensional CPU graph Transformer with user-supplied local weights).
 #' @param ... For `glycan_fingerprint()`, named options forwarded to
 #'   `fit_fingerprint()`, such as `max_size`, `unknown`, and `na_action`.
 #'   For `fit_fingerprint()`, reserved for future options and must be empty.
@@ -21,29 +22,35 @@
 #' @param max_size Maximum number of residues per connected substructure, an
 #'   integer from 1 to 7. Includes all sizes from 1 through this maximum.
 #'   Defaults to 3, including mono-, di-, and branched trisaccharides. Applies
-#'   only to substructure methods; supplying it for SweetNet is an error.
+#'   only to substructure methods; supplying it for an embedding method is an error.
 #' @param unknown How transform handles features absent from the fitted
 #'   dictionary: `"ignore"` (default), `"warn"`, or `"error"`. Unknown features
-#'   never add dimensions. Warnings are issued once per batch. SweetNet defaults
-#'   to `"error"` and supports only that policy: tokens outside its fixed pretrained
+#'   never add dimensions. Warnings are issued once per batch. Embedding methods default
+#'   to `"error"` and support only that policy: tokens outside their fixed pretrained
 #'   vocabulary are rejected, not ignored or assigned untrained representations.
 #' @param na_action `"propagate"` (default) excludes missing glycans from fitting
 #'   and returns an all-NA vector at each missing input position (integer for
-#'   substructures, double for SweetNet).
+#'   substructures, double for embeddings).
 #'   `"error"` rejects missing glycans during either fitting or transformation.
 #' @param checkpoint For SweetNet, `"sweetnet-v2"` (default), `"sweetnet-v1"`
 #'   (legacy), or a local path to either supported official checkpoint. Named
 #'   checkpoints are downloaded from a fixed official revision on first use and
 #'   verified with SHA-256 before caching or loading. Local files are identified
 #'   by hash and never replaced or downloaded. Both models return 128 coordinates,
-#'   but their coordinate spaces differ. This option applies only to SweetNet.
+#'   but their coordinate spaces differ. For GlycanGT, an explicit local path to
+#'   `pretrained_tokengt_large_multitask_mask_35_final.pt` is required. Download it
+#'   yourself from the official Hugging Face model repository after obtaining
+#'   access. glyfp never downloads GlycanGT files and accepts only the fixed
+#'   official artifact, identified by SHA-256, regardless of filename.
 #' @param cache_dir Directory for named SweetNet checkpoints. Defaults to the
 #'   per-user cache returned by `tools::R_user_dir("glyfp", "cache")`. No directory
-#'   is created for a local checkpoint or an offline cache miss.
-#' @param download Whether a missing named checkpoint may be downloaded (default
-#'   `TRUE`). Set `FALSE` for offline use; a verified cache entry or local file is
+#'   is created for a local checkpoint or an offline cache miss. This argument
+#'   applies only to SweetNet; supplying it for GlycanGT is an error.
+#' @param download Whether a missing named SweetNet checkpoint may be downloaded
+#'   (defaults to `TRUE` for SweetNet and `FALSE` otherwise). Set `FALSE` for offline use; a verified cache entry or local file is
 #'   then required. Corrupt cache files are rejected, never silently overwritten.
-#'   This policy and the cache directory are stored in the encoder and reused
+#'   GlycanGT never downloads weights; explicitly supplying `TRUE` is an error.
+#'   For SweetNet, this policy and the cache directory are stored in the encoder and reused
 #'   during transformation. Loading the package does not access the network.
 #' @param encoder An unmodified object returned by `fit_fingerprint()`.
 #'
@@ -117,14 +124,34 @@
 #' Cross-platform/runtime comparisons should allow floating-point tolerance
 #' (tested at a maximum absolute coordinate error of 1e-5).
 #'
+#' GlycanGT uses the official large model trained with 35% node-and-edge masking,
+#' with a 768-dimensional final graph-token readout. Fitting binds local weights,
+#' vocabulary and preprocessing, without training. It currently supports at least
+#' two residues, fully specified internal linkages and an unspecified normal
+#' reducing end. Unknown tokens, single residues and unsupported chemistry are
+#' rejected. No automatic download or runtime installation occurs.
+#'
+#' The GlycanGT encoder records the master seed (1729), graph-derived seed rule,
+#' ORF width (64), float32 dtype, canonical node order and single-graph batching.
+#' Orthogonal random node identifiers follow the official one-graph Gaussian QR
+#' construction and are fixed per canonical glycan, preserving the caller's R
+#' and CPU torch RNG state. This makes duplicates, reordering and separate batches
+#' reproducible. Upstream multi-graph batches use their maximum node count when
+#' constructing identifiers, so their outputs can differ from this fixed policy.
+#' This adapter does not claim to reproduce published downstream performance.
+#' Keep the serialized encoder and local checkpoint together. A changed model,
+#' identifier policy, vocabulary, implementation or dependency version requires
+#' recomputing all compared embeddings. No weights or model pointers are serialized.
+#'
 #' @returns `glycan_fingerprint()` and `transform_fingerprint()` return a list
-#'   of named integer vectors (substructures) or double vectors (SweetNet), with
+#'   of named integer vectors (substructures) or double vectors (embeddings), with
 #'   the same length, order, and names as `glycans`. Missing SweetNet inputs yield
-#'   128 `NA_real_` values.
+#'   128 `NA_real_` values; missing GlycanGT inputs yield 768.
 #'   All vectors use `encoder$features` as their names, including zero entries.
 #'   `fit_fingerprint()` returns a `glyfp_encoder` list containing `features`,
 #'   `method`, `params`, `schema_version`, and `versions`. For SweetNet, `features`
-#'   are `sweetnet_001` through `sweetnet_128`; `params$model` fixes model metadata.
+#'   are `sweetnet_001` through `sweetnet_128`; for GlycanGT they are
+#'   `glycangt_001` through `glycangt_768`. `params$model` fixes model metadata.
 #' @examples
 #' library(glyrepr)
 #' a <- as_glycan_structure(c("Gal(b1-4)GlcNAc", "GlcNAc"))
@@ -161,26 +188,43 @@ fit_fingerprint <- function(
   na_action = "propagate",
   checkpoint = "sweetnet-v2",
   cache_dir = tools::R_user_dir("glyfp", "cache"),
-  download = TRUE
+  download = identical(method, "sweetnet")
 ) {
   rlang::check_dots_empty()
-  if (identical(method, "sweetnet") && missing(unknown)) {
+  validate_options(method, max_size, unknown, na_action)
+  if (method %in% c("sweetnet", "glycangt") && missing(unknown)) {
     unknown <- "error"
   }
-  if (identical(method, "sweetnet") && !missing(max_size)) {
+  if (method %in% c("sweetnet", "glycangt") && !missing(max_size)) {
     cli::cli_abort(
       "{.arg max_size} applies only to substructure methods.",
       class = "glyfp_error_argument"
     )
   }
   if (
-    !identical(method, "sweetnet") &&
+    !method %in% c("sweetnet", "glycangt") &&
       (!missing(checkpoint) || !missing(cache_dir) || !missing(download))
   ) {
     cli::cli_abort(
-      "{.arg checkpoint}, {.arg cache_dir}, and {.arg download} apply only to SweetNet.",
+      "{.arg checkpoint}, {.arg cache_dir}, and {.arg download} apply only to embedding methods.",
       class = "glyfp_error_argument"
     )
+  }
+  if (identical(method, "glycangt")) {
+    if (missing(checkpoint)) {
+      cli::cli_abort(
+        "GlycanGT requires an explicit local {.arg checkpoint}; download the official weights yourself. glyfp never downloads GlycanGT weights.",
+        class = "glyfp_error_argument"
+      )
+    }
+    if (
+      !missing(cache_dir) || (!missing(download) && !identical(download, FALSE))
+    ) {
+      cli::cli_abort(
+        "GlycanGT uses only a user-supplied local checkpoint. {.arg cache_dir} is unsupported and {.arg download} may only be FALSE.",
+        class = "glyfp_error_argument"
+      )
+    }
   }
   validate_options(method, max_size, unknown, na_action)
   params <- list(
@@ -198,6 +242,9 @@ fit_fingerprint <- function(
       cache_dir,
       download
     ))
+  }
+  if (identical(method, "glycangt")) {
+    return(fit_glycangt(glycans, checkpoint, unknown, na_action))
   }
   features <- extract_features(glycans, params$max_size)
   structure(
@@ -225,6 +272,9 @@ transform_fingerprint <- function(glycans, encoder) {
   }
   if (identical(encoder$method, "sweetnet")) {
     return(transform_sweetnet(glycans, encoder))
+  }
+  if (identical(encoder$method, "glycangt")) {
+    return(transform_glycangt(glycans, encoder))
   }
   if (encoder$params$unknown != "ignore") {
     unseen <- setdiff(
@@ -287,8 +337,15 @@ print.glyfp_encoder <- function(x, ...) {
     "\n",
     sep = ""
   )
-  if (identical(x$method, "sweetnet")) {
-    cat("Model: ", x$params$model$model, " (CPU, 128 dimensions)\n", sep = "")
+  if (x$method %in% c("sweetnet", "glycangt")) {
+    cat(
+      "Model: ",
+      x$params$model$model,
+      " (CPU, ",
+      length(x$features),
+      " dimensions)\n",
+      sep = ""
+    )
   } else {
     cat("Maximum residues: ", x$params$max_size, "\n", sep = "")
   }
@@ -306,7 +363,7 @@ validate_options <- function(method, max_size, unknown, na_action) {
   }
   choice(
     method,
-    c("substructure_binary", "substructure_count", "sweetnet"),
+    c("substructure_binary", "substructure_count", "sweetnet", "glycangt"),
     "method"
   )
   choice(unknown, c("ignore", "warn", "error"), "unknown")
@@ -344,6 +401,9 @@ validate_encoder <- function(x) {
     (if (identical(x$method, "sweetnet")) {
       valid_sweetnet_params(x$params) &&
         identical(x$features, sweetnet_features())
+    } else if (identical(x$method, "glycangt")) {
+      valid_glycangt_params(x$params) &&
+        identical(x$features, glycangt_features())
     } else {
       identical(names(x$params), c("max_size", "unknown", "na_action"))
     }) &&
@@ -356,7 +416,11 @@ validate_encoder <- function(x) {
       {
         validate_options(
           x$method,
-          if (identical(x$method, "sweetnet")) 3L else x$params$max_size,
+          if (x$method %in% c("sweetnet", "glycangt")) {
+            3L
+          } else {
+            x$params$max_size
+          },
           x$params$unknown,
           x$params$na_action
         )

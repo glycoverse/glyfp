@@ -20,7 +20,7 @@ test_that("GlycanGT random policies reject invalid or stale configuration", {
   p <- glycangt_policy()
   p$batch_size <- 32L
   expect_error(glycangt_validate_policy(p), class = "glyfp_error_backend")
-  # This remains an internal trial, not an advertised pretrained method.
+  # Missing checkpoints must fail before any optional backend or download.
   expect_error(
     fit_fingerprint("Gal", method = "glycangt"),
     class = "glyfp_error_argument"

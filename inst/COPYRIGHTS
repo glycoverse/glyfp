@@ -31,4 +31,6 @@ https://github.com/matsui-lab/GlycanGT
 The upstream code is distributed under Apache-2.0; the license is included in
 licenses/GlycanGT-LICENSE. The R port changes the implementation language and
 runs one canonical graph at a time with a recorded deterministic ORF seed policy.
+The bundled monomer and linkage vocabulary tables derive from the same public
+repository, preserving indices and appending the upstream [MASK] token.
 The small test model is untrained and is not a distributed pretrained checkpoint.

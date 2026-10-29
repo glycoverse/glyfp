@@ -36,8 +36,8 @@ test_that("structural methods do not load torch in a fresh R process", {
       # Isolate optional backend startup from igraph, which initializes an absent
       # R RNG state during graph parsing. Build the graph before clearing it.
       inputs <- glyfp:::sweetnet_inputs(glyparse::auto_parse("Gal"))
-      glyfp::glycan_fingerprint("Gal", "substructure_binary")
-      glyfp::glycan_fingerprint("Gal", "substructure_count")
+      glyfp::glycan_fingerprint("Gal(b1-", "substructure_binary")
+      glyfp::glycan_fingerprint("Gal(b1-", "substructure_count")
       !"torch" %in% loadedNamespaces()
     },
     args = list(package = getNamespaceInfo("glyfp", "path")),
@@ -75,7 +75,7 @@ test_that("first native inference preserves present and absent caller state", {
           }
           Sys.unsetenv("TORCH_INSTALL")
         }
-        fingerprint <- glyfp:::sweetnet_run(inputs, checkpoint)$embeddings
+        fingerprint <- glyfp:::sweetnet_run(inputs, checkpoint)
         list(
           output = length(fingerprint) == 1L &&
             length(fingerprint[[1L]]) == 128L &&

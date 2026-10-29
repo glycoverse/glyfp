@@ -2,13 +2,9 @@
 % Please edit documentation in R/fingerprint.R
 \name{glycan_fingerprint}
 \alias{glycan_fingerprint}
-\alias{fit_fingerprint}
-\alias{transform_fingerprint}
-\title{Encode Glycans as Structural Fingerprints}
+\title{Encode Complete Glycans as Fingerprints}
 \usage{
-glycan_fingerprint(glycans, method = "substructure_binary", ...)
-
-fit_fingerprint(
+glycan_fingerprint(
   glycans,
   method = "substructure_binary",
   ...,
@@ -19,208 +15,123 @@ fit_fingerprint(
   cache_dir = tools::R_user_dir("glyfp", "cache"),
   download = identical(method, "sweetnet")
 )
-
-transform_fingerprint(glycans, encoder)
 }
 \arguments{
-\item{glycans}{A \code{\link[glyrepr:glycan_structure]{glyrepr::glycan_structure()}} vector (class
-\code{glyrepr_structure}) or a character vector in any format supported by
-\code{\link[glyparse:auto_parse]{glyparse::auto_parse()}}. Like glymotif, text formats are auto-detected;
-there is no separate format argument. For explicit format selection, call
-the corresponding glyparse parser first. Invalid text raises a parse error.}
+\item{glycans}{A \code{\link[glyrepr:glycan_structure]{glyrepr::glycan_structure()}} vector or a character vector
+in any format supported by \code{\link[glyparse:auto_parse]{glyparse::auto_parse()}}. Formats are detected
+automatically, as in glymotif. For explicit format selection, use the
+corresponding glyparse parser first. Structures must be complete: concrete
+residues, specified linkages, positions, substituents and reducing-end
+alpha/beta state. Unknown or ambiguous fields raise an error.}
 
-\item{method}{Either \code{"substructure_binary"} (default, presence/absence) or
-\code{"substructure_count"} (number of occurrences), or \code{"sweetnet"} (optional
-pretrained 128-dimensional CPU embedding), or \code{"glycangt"} (pretrained
-768-dimensional CPU graph Transformer with user-supplied local weights),
-or \code{"gifflar"} (384-dimensional CPU molecular graph embedding with local weights).}
+\item{method}{One of \code{"substructure_binary"} (default), \code{"substructure_count"},
+\code{"sweetnet"}, \code{"glycangt"}, or \code{"gifflar"}.}
 
-\item{...}{For \code{glycan_fingerprint()}, named options forwarded to
-\code{fit_fingerprint()}, such as \code{max_size}, \code{unknown}, and \code{na_action}.
-For \code{fit_fingerprint()}, reserved for future options and must be empty.
-Options after \code{...} must be named.}
+\item{...}{Reserved for future options. Must be empty.}
 
-\item{max_size}{Maximum number of residues per connected substructure, an
-integer from 1 to 7. Includes all sizes from 1 through this maximum.
-Defaults to 3, including mono-, di-, and branched trisaccharides. Applies
-only to substructure methods; supplying it for an embedding method is an error.}
+\item{max_size}{Maximum residues per connected motif, an integer from 1 to 7.
+The default 3 selects all mono-, di- and trisaccharides, including branches.
+Applies only to substructure methods.}
 
-\item{unknown}{How transform handles features absent from the fitted
-dictionary: \code{"ignore"} (default), \code{"warn"}, or \code{"error"}. Unknown features
-never add dimensions. Warnings are issued once per batch. Embedding methods default
-to \code{"error"} and support only that policy: tokens outside their fixed pretrained
-vocabulary are rejected, not ignored or assigned untrained representations.}
+\item{unknown}{For substructures, \code{"ignore"} (default), \code{"warn"} or \code{"error"}
+controls motifs absent from the fixed dictionary. Known motifs are still
+counted; new coordinates are never added. This does not permit uncertain
+input structures. Embedding methods default to and require \code{"error"} for
+tokens outside their fixed vocabularies.}
 
-\item{na_action}{\code{"propagate"} (default) excludes missing glycans from fitting
-and returns an all-NA vector at each missing input position (integer for
-substructures, double for embeddings).
-\code{"error"} rejects missing glycans during either fitting or transformation.}
+\item{na_action}{\code{"propagate"} (default) returns an all-NA vector for each
+missing input; \code{"error"} rejects missing inputs.}
 
-\item{checkpoint}{For SweetNet, \code{"sweetnet-v2"} (default), \code{"sweetnet-v1"}
-(legacy), or a local path to either supported official checkpoint. Named
-checkpoints are downloaded from a fixed official revision on first use and
-verified with SHA-256 before caching or loading. Local files are identified
-by hash and never replaced or downloaded. Both models return 128 coordinates,
-but their coordinate spaces differ. For GlycanGT, an explicit local path to
-\code{pretrained_tokengt_large_multitask_mask_35_final.pt} is required. Download it
-yourself from the official Hugging Face model repository after obtaining
-access. glyfp never downloads GlycanGT files and accepts only the fixed
-official artifact, identified by SHA-256, regardless of filename. GIFFLAR
-likewise requires a local path to \code{glycowork_gifflar_species.pt} from
-the official DBojar/glycowork_models Hugging Face repository and never downloads it.}
+\item{checkpoint}{For SweetNet, \code{"sweetnet-v2"} (default), \code{"sweetnet-v1"}, or
+the local path to either supported official artifact. Named models download
+from a pinned official revision on first use and are SHA-256 checked before
+caching and loading. GlycanGT and GIFFLAR require an explicit local file:
+\code{pretrained_tokengt_large_multitask_mask_35_final.pt} or
+\code{glycowork_gifflar_species.pt}, respectively. Obtain these yourself from
+\href{https://huggingface.co/Akikitani295/GlycanGT}{Akikitani295/GlycanGT} or
+\href{https://huggingface.co/DBojar/glycowork_models}{DBojar/glycowork_models}.
+Local files are identified by SHA-256, regardless of filename, and are
+never replaced or downloaded. Applies only to embedding methods.}
 
-\item{cache_dir}{Directory for named SweetNet checkpoints. Defaults to the
-per-user cache returned by \code{tools::R_user_dir("glyfp", "cache")}. No directory
-is created for a local checkpoint or an offline cache miss. This argument
-applies only to SweetNet; supplying it for GlycanGT or GIFFLAR is an error.}
+\item{cache_dir}{SweetNet's named-checkpoint cache directory. No directory is
+created for local checkpoints or offline cache misses. Unsupported for
+GlycanGT and GIFFLAR.}
 
-\item{download}{Whether a missing named SweetNet checkpoint may be downloaded
-(defaults to \code{TRUE} for SweetNet and \code{FALSE} otherwise). Set \code{FALSE} for offline use; a verified cache entry or local file is
-then required. Corrupt cache files are rejected, never silently overwritten.
-GlycanGT and GIFFLAR never download weights; explicitly supplying \code{TRUE} is an error.
-For SweetNet, this policy and the cache directory are stored in the encoder and reused
-during transformation. Loading the package does not access the network.}
-
-\item{encoder}{An unmodified object returned by \code{fit_fingerprint()}.}
+\item{download}{Whether SweetNet may download a missing named checkpoint.
+Set \code{FALSE} for offline use. GlycanGT and GIFFLAR never download weights;
+\code{FALSE} is accepted and \code{TRUE} is an error. Applies only to embeddings.}
 }
 \value{
-\code{glycan_fingerprint()} and \code{transform_fingerprint()} return a list
-of named integer vectors (substructures) or double vectors (embeddings), with
-the same length, order, and names as \code{glycans}. Missing SweetNet inputs yield
-128 \code{NA_real_} values; missing GlycanGT inputs yield 768.
-All vectors use \code{encoder$features} as their names, including zero entries.
-\code{fit_fingerprint()} returns a \code{glyfp_encoder} list containing \code{features},
-\code{method}, \code{params}, \code{schema_version}, and \code{versions}. For SweetNet, \code{features}
-are \code{sweetnet_001} through \code{sweetnet_128}; for GlycanGT they are
-\code{glycangt_001} through \code{glycangt_768}; for GIFFLAR they are
-\code{gifflar_001} through \code{gifflar_384}. \code{params$model} fixes model metadata.
+A list of named integer vectors (substructures) or double vectors
+(embeddings), preserving input length, order and names. Motif coordinates
+are named by canonical structure; embedding names are \code{sweetnet_001} to
+\code{sweetnet_128}, \code{glycangt_001} to \code{glycangt_768}, or \code{gifflar_001} to
+\code{gifflar_384}. Zero and NA entries retain all coordinates. No model or
+dictionary object is returned.
 }
 \description{
-\code{glycan_fingerprint()} fits a dictionary on the supplied batch, then transforms
-that batch, returning only a list of vectors. \code{fit_fingerprint()} creates a
-reusable encoder; \code{transform_fingerprint()} applies its fixed dictionary,
-method, and parameters to another batch.
+Returns one named vector per glycan using a fixed built-in motif dictionary
+or a pretrained model. Each glycan's coordinates are independent of other
+glycans in the input batch.
 }
 \details{
-For substructure methods, features are canonical IUPAC strings returned by \code{\link[glymotif:extract_motif]{glymotif::extract_motif()}}.
-Counts come directly from \code{\link[glymotif:count_motif]{glymotif::count_motifs()}} with substructure
-alignment, linkages included, strict substituent matching, and strict mode.
-Overlapping occurrences count separately; symmetric mappings of the same
-residue set count once. Binary values are \code{as.integer(count > 0)}.
+The built-in dictionary \verb{glydb-2.12.1-complete-v1} contains 24,124 canonical
+connected motifs of sizes 1--7, derived from 8,211 unique complete structures
+(8,416 accessions) in glydb's GlyGen 2.12.1 data. The default maximum size 3
+selects 3,173 coordinates. Features are sorted by UTF-8 bytes, without hashing
+or folding. The dictionary does not grow or change with the input batch.
+Different \code{max_size} settings or future dictionary versions define different
+coordinate sets. Coverage is limited to this source snapshot; unseen motifs
+follow \code{unknown}. See the Get started article for provenance and exclusions.
 
-glymotif semantics apply: concrete residues match compatible generic motifs,
-and unknown motif linkage positions act as wildcards; the reverse does not
-hold in strict mode. Feature columns can therefore overlap semantically.
-Motif reducing-end half-linkages constrain residue anomers, even when the
-residue occurs internally. Linkage positions and substituents are retained.
-Alditol structures and unresolved floating parts/substituents are rejected in
-this version. Protein/lipid attachments, 3D geometry, and atomic stereochemistry
-beyond the residue/linkage labels are not encoded.
+Features use \code{\link[glymotif:extract_motif]{glymotif::extract_motif()}} and \code{\link[glymotif:count_motif]{glymotif::count_motifs()}} with
+substructure alignment, linkages included, strict substituent matching and
+strict mode. Overlapping occurrences count separately; symmetric mappings of
+the same residue set count once. Binary values are \code{as.integer(count > 0)}.
+Residue identities, linkage labels, substituents and reducing-end alpha/beta
+information are retained. Protein/lipid attachments and 3D geometry are not
+represented. Alditols and floating parts/substituents are unsupported.
 
-\strong{Each top-level substructure call fits its own batch. Independently computed batches must
-not be compared directly, even when their vectors have equal lengths.}
-Combine all glycans into one call, or fit once and reuse the encoder. In a
-predictive workflow fit on training data only, then transform held-out data.
-Unknown fragments are projected away by default; an all-zero vector can mean
-that no known fragments occurred, not that the glycan is empty.
+All methods first validate complete input structures. The pretrained models
+do not encode reducing-end alpha/beta information: only after validation,
+embedding preprocessing omits this known state at the normal reducing carbon.
+Thus embeddings cannot distinguish glycans differing only in this state;
+motif fingerprints retain it. Other reducing-end positions and unsupported
+chemistry are rejected, not guessed. Missing inputs are distinct from unknown
+structure fields: empty input returns \code{list()} and missing inputs retain the
+full coordinate set filled with NA values.
 
-The dictionary is the unique extracted motifs sorted by UTF-8 bytes, without
-hashing or folding. Child order and input order do not affect it. Unknown
-features mean newly extracted canonical motifs absent from this dictionary,
-even if a broader known motif matches them. Save the encoder with \code{saveRDS()}
-and restore with \code{readRDS()}. It stores ordinary R data and dependency versions,
-not training graphs or external pointers. Transform requires the same
-glyrepr, glymotif, and glyparse versions used for fitting, so changed upstream
-normalization or matching semantics cannot silently alter saved encoders.
+SweetNet v1 and v2 return 128 coordinates from \code{bn2(lin2(...))}, before final
+activation, dropout and classification. The default v2 follows the current
+upstream species model; v1 and v2 coordinate spaces must not be mixed.
+GlycanGT returns the large mask-35 model's final 768-dimensional graph token
+and requires at least two residues. Its orthogonal random identifiers use
+master seed 1729, a SHA-256-derived seed per canonical projected glycan, the
+official single-graph Gaussian QR construction and width 64. This fixed
+policy preserves caller R and CPU torch RNG state. Upstream multi-graph ORF
+batches can yield different outputs; this adapter does not claim to reproduce
+published downstream performance. GIFFLAR concatenates mean atom, bond and
+residue representations (384 coordinates), using 27 fixed residue templates.
+It rejects unsupported templates, anomeric-to-anomeric bonds and attachments
+that would move or extend a modification. See the article for supported labels.
 
-An empty input returns \code{list()}. For substructure methods, fitting empty or all-missing input creates
-an empty dictionary: each transformed vector then has length zero, including
-missing entries, whose missingness cannot be represented at zero dimensions.
-Keep the original \code{is.na(glycans)} mask when using such an encoder.
-Large, highly branched structures can be expensive to enumerate; start with
-the default \code{max_size = 3} and increase only as needed.
-
-SweetNet supports the legacy and v2 pretrained species models from glycowork.
-The default is v2, matching the current upstream pretrained model. Fitting binds
-a fixed pretrained coordinate space and validates inputs, without training.
-It always has 128 features, including when fitted to empty/all-missing input.
-Independent SweetNet fits are comparable only when their recorded model and
-preprocessing metadata match. Reusing one encoder is recommended.
-Unknown reducing-end anomers at the residue's inferred normal carbon position
-are omitted from the model input; this is glyrepr's default annotation for an
-unspecified reducing end. Explicit alpha/beta half-linkages, other reducing-end
-positions, and ambiguous internal linkages are rejected. The directed
-residue/linkage graph is built directly from the glyrepr structure.
-No unknown model token is accepted. See \code{vignette("glyfp", package = "glyfp")}.
-
-SweetNet runs entirely in R using the optional torch, digest, and zip packages.
-Its encoder records model version, official source revision, weight and
-vocabulary SHA-256, preprocessing/readout, R implementation hashes and the R
-torch version. Every transform validates these records. Independently fitted
-v1 and v2 encoders must not be mixed, even though both have 128 features with
-the same coordinate names. Retain the encoder alongside exported vectors.
-Named checkpoints can be reacquired if the cache is removed and downloading
-is allowed; local checkpoints must remain at their recorded paths. No model
-pointers or weights are serialized. The legacy archive stores CUDA tags;
-glyfp relocates these tags to CPU in a temporary copy before loading. Tensor
-storage bytes and the original file are unchanged. No Python is used.
-The optional torch runtime must be installed explicitly by the user; it is
-never automatically installed by these functions.
-CPU evaluation uses float32 tensors, one graph at a time, frozen normalization,
-no dropout and no gradients, without changing the caller's thread settings.
-Cross-platform/runtime comparisons should allow floating-point tolerance
-(tested at a maximum absolute coordinate error of 1e-5).
-
-GlycanGT uses the official large model trained with 35\% node-and-edge masking,
-with a 768-dimensional final graph-token readout. Fitting binds local weights,
-vocabulary and preprocessing, without training. It currently supports at least
-two residues, fully specified internal linkages and an unspecified normal
-reducing end. Unknown tokens, single residues and unsupported chemistry are
-rejected. No automatic download or runtime installation occurs.
-
-The GlycanGT encoder records the master seed (1729), graph-derived seed rule,
-ORF width (64), float32 dtype, canonical node order and single-graph batching.
-Orthogonal random node identifiers follow the official one-graph Gaussian QR
-construction and are fixed per canonical glycan, preserving the caller's R
-and CPU torch RNG state. This makes duplicates, reordering and separate batches
-reproducible. Upstream multi-graph batches use their maximum node count when
-constructing identifiers, so their outputs can differ from this fixed policy.
-This adapter does not claim to reproduce published downstream performance.
-Keep the serialized encoder and local checkpoint together. A changed model,
-identifier policy, vocabulary, implementation or dependency version requires
-recomputing all compared embeddings. No weights or model pointers are serialized.
-
-GIFFLAR uses the official glycowork species checkpoint and concatenates mean
-atom, bond and monosaccharide representations (384 coordinates). Its native
-molecular graph builder uses 27 fixed residue templates, including common
-N-acetyl, uronic-acid, sialic-acid, sulfated and phosphorylated residues; see
-the Get started article for the full list. It requires concrete internal
-linkages and an unspecified normal reducing end. Unsupported templates,
-anomeric-to-anomeric bonds and modification-dependent attachments are rejected.
-The model preserves the upstream atom and bond features, ring relations,
-directed linkage features and pooling; it does not require Python, RDKit or
-GlyLES. Every transform validates the checkpoint, templates, vocabulary and
-implementation metadata. Computation uses CPU float32, one glycan at a time,
-with no random identifiers. Missing inputs yield 384 \code{NA_real_} coordinates.
-GIFFLAR, SweetNet and GlycanGT coordinate spaces must not be combined.
+Embeddings run in R with optional torch and digest; SweetNet and GlycanGT also
+use zip. No Python, RDKit or GlyLES runtime is used. Install torch's runtime
+explicitly: loading glyfp and calling inference never install it automatically.
+CPU evaluation uses float32, frozen normalization, no dropout or gradients,
+and one glycan at a time. Batch order, duplicates and batch size do not change
+coordinates under the same model, weights, preprocessing and runtime settings.
+Preserve these settings and package/runtime versions with saved results.
+Recompute compared vectors when the model, dictionary or implementation changes.
+Cross-platform comparisons should allow floating-point tolerance (the reference
+tests bound maximum absolute coordinate error by 1e-5).
 }
 \examples{
-library(glyrepr)
-a <- as_glycan_structure(c("Gal(b1-4)GlcNAc", "GlcNAc"))
-b <- as_glycan_structure("Gal(b1-3)GalNAc")
-
-# One batch provides one common feature space.
-all_fp <- glycan_fingerprint(c(a, b), method = "substructure_binary")
-lengths(all_fp)
-
-# Or retain an encoder for future batches.
-encoder <- fit_fingerprint(a, method = "substructure_count")
-a_fp <- transform_fingerprint(a, encoder)
-b_fp <- transform_fingerprint(b, encoder)
-identical(names(a_fp[[1]]), names(b_fp[[1]]))
-
-path <- tempfile(fileext = ".rds")
-saveRDS(encoder, path)
-identical(transform_fingerprint(b, readRDS(path)), b_fp)
-unlink(path)
+a <- "Gal(b1-3)Gal(b1-3)Gal(b1-"
+b <- c("Gal(b1-4)GlcNAc(b1-", NA_character_)
+fp_a <- glycan_fingerprint(a, "substructure_count")
+fp_b <- glycan_fingerprint(b, "substructure_count")
+identical(c(fp_a, fp_b), glycan_fingerprint(c(a, b), "substructure_count"))
+fp_a[[1]][c("Gal(b1-", "Gal(b1-3)Gal(b1-")]
+lengths(fp_b)
 }

@@ -35,3 +35,26 @@ structure_issues <- function(graph) {
   }
   reasons
 }
+
+# User-approved model projection: the input has already passed complete-structure
+# validation. Only the known reducing-end alpha/beta state is omitted, because
+# the pretrained models do not encode it. Preserve its carbon position, allowing
+# each backend to reject non-normal reducing-end positions as before.
+embedding_projection <- function(glycans) {
+  if (!length(glycans)) {
+    return(glycans)
+  }
+  graphs <- lapply(as.list(glycans), function(graph) {
+    if (is.null(graph)) {
+      return(NULL)
+    }
+    igraph::set_graph_attr(
+      graph,
+      "anomer",
+      sub("^[ab]", "?", igraph::graph_attr(graph, "anomer"))
+    )
+  })
+  result <- do.call(glyrepr::glycan_structure, graphs)
+  names(result) <- names(glycans)
+  result
+}

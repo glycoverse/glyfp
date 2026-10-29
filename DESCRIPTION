@@ -3,8 +3,8 @@ Title: Structural Fingerprints for Glycans
 Version: 0.0.0.9000
 Authors@R: person("Bin", "Fu", , "23110220018@m.fudan.edu.cn", role = c("aut", "cre"), comment = c(ORCID = "0000-0001-8567-2997"))
 Description: Encodes glycan structures as binary or count vectors of connected
-    residue substructures. Learns explicit feature dictionaries and reuses them
-    across batches, preserving residue identities, substituents, and glycosidic
+    residue substructures. Uses a fixed dictionary derived from complete structures in 'glydb',
+    preserving residue identities, substituents, and glycosidic
     linkage labels from 'glyrepr' structures. Optionally computes pretrained
     'SweetNet', 'GlycanGT', and 'GIFFLAR' embeddings using 'torch' for R on the CPU
     and verified local model weights.

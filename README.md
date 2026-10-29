@@ -16,9 +16,9 @@ coverage](https://codecov.io/gh/glycoverse/glyfp/graph/badge.svg)](https://app.c
 
 The glyfp package represents glycans as fingerprints for comparison and
 modeling. It provides binary and count fingerprints of connected glycan
-substructures, reusable encoders for multiple batches, and optional
-pretrained SweetNet, GlycanGT and GIFFLAR embeddings. Inputs can be
-glyrepr structures or text in formats supported by glyparse.
+substructures and optional pretrained SweetNet, GlycanGT and GIFFLAR
+embeddings through `glycan_fingerprint()`. Inputs can be glyrepr
+structures or text in formats supported by glyparse.
 
 ## Installation
 
@@ -40,8 +40,7 @@ glycoverse](https://github.com/glycoverse/glycoverse#installation).
 ## Documentation
 
 -   🚀 Get started: [Get started with glyfp](vignettes/glyfp.Rmd)
--   📚 Reference: [Fingerprint functions and
-    encoders](man/glycan_fingerprint.Rd)
+-   📚 Reference: [Glycan fingerprints](man/glycan_fingerprint.Rd)
 
 These links point to the local source documentation until the package
 website is published. After installation, use
@@ -62,40 +61,21 @@ as inputs to glycan comparison, clustering, and predictive workflows.
 library(glyfp)
 ```
 
-Encode a batch of glycans as substructure counts:
+Encode complete glycans using the built-in glydb motif dictionary:
 
 ``` r
 glycans <- c("Gal(b1-3)Gal(b1-3)Gal(b1-", "Gal(b1-")
-glycan_fingerprint(glycans, method = "substructure_count", max_size = 2)
-#> [[1]]
+fp <- glycan_fingerprint(glycans, method = "substructure_count")
+lengths(fp)
+#> [1] 3173 3173
+fp[[1]][c("Gal(b1-", "Gal(b1-3)Gal(b1-")]
 #>          Gal(b1- Gal(b1-3)Gal(b1- 
-#>                3                2 
-#> 
-#> [[2]]
-#>          Gal(b1- Gal(b1-3)Gal(b1- 
-#>                1                0
+#>                3                2
 ```
 
 The repeated disaccharide is counted twice, including overlapping
 occurrences. Use `method = "substructure_binary"`, the default, for
-presence/absence.
-
-For multiple batches, fit once and reuse the encoder:
-
-``` r
-encoder <- fit_fingerprint(glycans, method = "substructure_binary")
-transform_fingerprint(c("Gal(b1-3)Gal(b1-", NA_character_), encoder)
-#> [[1]]
-#>                   Gal(b1-          Gal(b1-3)Gal(b1- Gal(b1-3)Gal(b1-3)Gal(b1- 
-#>                         1                         1                         0 
-#> 
-#> [[2]]
-#>                   Gal(b1-          Gal(b1-3)Gal(b1- Gal(b1-3)Gal(b1-3)Gal(b1- 
-#>                        NA                        NA                        NA
-```
-
-Each top-level substructure call fits its own dictionary; independently
-fitted batches are not directly comparable, even when their vectors have
-equal lengths. The [getting-started vignette](vignettes/glyfp.Rmd) shows
-both combining batches in one call and reusing an encoder, along with
-missing and unknown input.
+presence/absence. The fixed dictionary keeps coordinates aligned across
+separate calls. Inputs must specify complete structures, including the
+reducing-end anomer. The [getting-started vignette](vignettes/glyfp.Rmd)
+explains all methods, pretrained checkpoints and supported chemistry.

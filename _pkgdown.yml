@@ -3,7 +3,7 @@ template:
 development:
   mode: auto
 reference:
-- title: Fingerprints and reusable encoders
+- title: Glycan fingerprints
   contents:
   - glycan_fingerprint
 articles:

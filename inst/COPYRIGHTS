@@ -44,3 +44,19 @@ uses 27 explicitly supported residues with fixed-position modifications and
 rejects other chemistry. Its network, graph construction and parser are
 reimplemented in R. The shared vocabulary matches the pinned v12_lib.pkl
 indices exactly. Pretrained weights are not distributed in this package.
+
+Built-in motif dictionary: derived from glydb commit
+cafa287eac546a9899977a9e8c777af77cfd2ac3 (MIT package), using GlyGen reviewed
+release 2.12.1 and its GlyTouCan structure identifiers.
+Sources: https://github.com/glycoverse/glydb
+https://data.glygen.org/ln2data/releases/data/v-2.12.1/reviewed/
+Attribution: GlyGen and its contributing data providers, including GlyTouCan.
+GlyGen applies Creative Commons Attribution 4.0 International (CC BY 4.0) to
+its database sets: https://www.glygen.org/license/
+License: https://creativecommons.org/licenses/by/4.0/
+Changes: glydb parsed the source structures; glyfp selected complete, concrete
+structures, deduplicated them, enumerated connected motifs of 1--7 residues,
+and sorted their canonical representations. The derived dictionary remains
+under CC BY 4.0. Package implementation code is separately licensed as stated
+in DESCRIPTION. Reproduction and exclusion details are in data-raw/README.md;
+installed provenance is extdata/motif-dictionary-metadata.R.

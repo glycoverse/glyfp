@@ -24,7 +24,7 @@ knitr::opts_chunk$set(
 
 The glyfp package represents glycans as fingerprints for comparison and modeling.
 It provides binary and count fingerprints of connected glycan substructures,
-reusable encoders for multiple batches, and optional pretrained SweetNet embeddings.
+reusable encoders for multiple batches, and optional pretrained SweetNet and GlycanGT embeddings.
 Inputs can be glyrepr structures or text in formats supported by glyparse.
 
 ## Installation

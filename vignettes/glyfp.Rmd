@@ -18,6 +18,7 @@ text supported by glyparse. Both encoding functions return only a list of vector
 | `substructure_binary` (default) | Presence/absence of connected residue motifs | Learns a motif dictionary from the supplied batch |
 | `substructure_count` | Number of overlapping motif occurrences | Learns the same motif dictionary |
 | `sweetnet` | 128 pretrained latent features | Binds and validates a fixed model, vocabulary and preprocessing |
+| `glycangt` | 768 pretrained graph Transformer features | Binds a user-supplied local checkpoint and a fixed random-identifier policy |
 
 The sections below use the same three functions: `glycan_fingerprint()`,
 `fit_fingerprint()`, and `transform_fingerprint()`.
@@ -244,3 +245,79 @@ Ordinary tests mock network calls. Real pretrained integration tests use local
 files specified by developer-only `GLYFP_TEST_CHECKPOINT` (v1) and
 `GLYFP_TEST_V2_CHECKPOINT` (v2), comparing all 128 coordinates with independent
 upstream reference values at maximum absolute error below `1e-5`.
+
+## Pretrained GlycanGT embeddings
+
+[GlycanGT](https://doi.org/10.1093/bioinformatics/btag147) uses a graph Transformer
+with separate residue and linkage tokens. glyfp supports the authors' large model
+trained with 35% node-and-edge masking, returning the final graph token's 768
+coordinates. Inference uses R torch on the CPU; Python is not required.
+
+### Download the checkpoint yourself
+
+GlycanGT differs from SweetNet: **you must obtain the weights yourself and pass a
+local file path. glyfp never downloads GlycanGT weights.** Visit the
+[official model repository](https://huggingface.co/Akikitani295/GlycanGT), obtain
+access under its stated conditions, then download
+`outputs/mask_35/pretrained_tokengt_large_multitask_mask_35_final.pt` (about 367 MB).
+The upstream project declares Apache-2.0; the model repository has a separate
+access step. Do not put account credentials into R code or an encoder.
+
+After installing the optional R packages and torch runtime shown above:
+
+```{r, eval=FALSE}
+checkpoint <- "/path/to/pretrained_tokengt_large_multitask_mask_35_final.pt"
+encoder <- fit_fingerprint(
+  c("Gal(b1-4)GlcNAc", "Man(a1-3)[Man(a1-6)]Man"),
+  method = "glycangt", checkpoint = checkpoint
+)
+fp <- transform_fingerprint(c("Gal(b1-4)GlcNAc", NA_character_), encoder)
+lengths(fp) # 768 768
+```
+
+Omitting `checkpoint`, supplying a URL or missing file, or requesting
+`download = TRUE` produces an error. `download = FALSE` may be supplied explicitly;
+`cache_dir` applies only to SweetNet. Local weights are hash-checked on every call
+and are never copied to a persistent cache or replaced. The original CUDA-tagged
+archive is relocated in a temporary CPU copy without altering its tensor storage
+or original file. Loaded tensors may be reused in memory during the R session.
+
+The accepted artifact at Hugging Face revision
+`7c9f4a19b366ca48ed03995a0ad47fa1e745f24c` has SHA-256
+`d490d18795ee6d4746b9b4abd0a5c733d8f7e4261998d050c1b741b65e530a54`.
+An altered or different checkpoint is rejected even if its filename matches.
+
+### Stable identifiers and supported inputs
+
+The official model generates orthogonal random node identifiers, including during
+`eval()`. glyfp fixes one draw per canonical glycan: a SHA-256-derived seed from
+master seed 1729 and the canonical glyrepr string, followed by the original
+single-graph Gaussian QR construction and padding/truncation to width 64. The
+encoder records this policy, seed, dimensions, float32 dtype and node order along
+with checkpoint, vocabulary, implementation and dependency identities.
+Duplicates, equivalent text/structure inputs, reordering and separate batches
+therefore retain the same coordinates. Caller R and CPU torch RNG states are
+preserved by the native backend.
+
+This is the official **single-graph** ORF construction. Upstream multi-graph
+batches use the maximum node count in the batch and can produce a different
+identifier distribution and different outputs. This deterministic adapter is not
+a claim to reproduce the paper's downstream benchmark results. Compare embeddings
+only when the recorded encoder metadata match; do not mix them with SweetNet
+coordinates or embeddings produced under another ORF policy.
+
+The current adapter requires at least two residues, concrete internal linkages,
+an unspecified reducing-end anomer at its normal carbon, and tokens in the fixed
+vocabulary. It rejects single residues because the upstream edge-triple pipeline
+does not retain edge-free graphs. Explicit reducing-end alpha/beta chemistry,
+ambiguous linkages, floating components and alditols are also rejected.
+`unknown = "error"` is the only supported policy. Empty and all-NA fitting still
+binds all 768 coordinates; missing inputs yield all-NA double vectors.
+
+Use `saveRDS(encoder, ...)` and `readRDS(...)` as with the other methods. The
+encoder contains ordinary metadata, not weight tensors or external pointers;
+keep the verified local checkpoint at its recorded path. The backend has been
+checked against the official pretrained model on 12 glycans and all 768 coordinates
+with a maximum absolute tolerance of 1e-5. Ordinary tests need no network; the real
+integration suite uses developer-only `GLYFP_TEST_GLYCANGT_CHECKPOINT` to locate an
+already downloaded local artifact.

@@ -7,4 +7,4 @@
 * `method = "sweetnet"` now defaults to SweetNet v2, with legacy weights available through `checkpoint = "sweetnet-v1"`. Encoders record their model identity; outputs from different model versions must not be combined.
 * Named checkpoints download from pinned official sources on first use, verify SHA-256, and reuse a per-user cache. `download = FALSE` supports offline use, and `checkpoint` still accepts verified local files.
 
-* Adds an internal GlycanGT inference kernel with deterministic graph identifiers and numerical regression tests. Pretrained GlycanGT is not yet exposed through the public API; its checkpoint still requires access and validation.
+* `method = "glycangt"` computes 768-dimensional pretrained graph Transformer embeddings entirely in R. It requires a manually downloaded official local checkpoint and never downloads weights. Encoders fix the model identity, vocabulary and deterministic per-glycan orthogonal node identifiers across batches.

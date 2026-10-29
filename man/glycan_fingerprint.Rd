@@ -32,7 +32,8 @@ the corresponding glyparse parser first. Invalid text raises a parse error.}
 \item{method}{Either \code{"substructure_binary"} (default, presence/absence) or
 \code{"substructure_count"} (number of occurrences), or \code{"sweetnet"} (optional
 pretrained 128-dimensional CPU embedding), or \code{"glycangt"} (pretrained
-768-dimensional CPU graph Transformer with user-supplied local weights).}
+768-dimensional CPU graph Transformer with user-supplied local weights),
+or \code{"gifflar"} (384-dimensional CPU molecular graph embedding with local weights).}
 
 \item{...}{For \code{glycan_fingerprint()}, named options forwarded to
 \code{fit_fingerprint()}, such as \code{max_size}, \code{unknown}, and \code{na_action}.
@@ -64,17 +65,19 @@ but their coordinate spaces differ. For GlycanGT, an explicit local path to
 \code{pretrained_tokengt_large_multitask_mask_35_final.pt} is required. Download it
 yourself from the official Hugging Face model repository after obtaining
 access. glyfp never downloads GlycanGT files and accepts only the fixed
-official artifact, identified by SHA-256, regardless of filename.}
+official artifact, identified by SHA-256, regardless of filename. GIFFLAR
+likewise requires a local path to \code{glycowork_gifflar_species.pt} from
+the official DBojar/glycowork_models Hugging Face repository and never downloads it.}
 
 \item{cache_dir}{Directory for named SweetNet checkpoints. Defaults to the
 per-user cache returned by \code{tools::R_user_dir("glyfp", "cache")}. No directory
 is created for a local checkpoint or an offline cache miss. This argument
-applies only to SweetNet; supplying it for GlycanGT is an error.}
+applies only to SweetNet; supplying it for GlycanGT or GIFFLAR is an error.}
 
 \item{download}{Whether a missing named SweetNet checkpoint may be downloaded
 (defaults to \code{TRUE} for SweetNet and \code{FALSE} otherwise). Set \code{FALSE} for offline use; a verified cache entry or local file is
 then required. Corrupt cache files are rejected, never silently overwritten.
-GlycanGT never downloads weights; explicitly supplying \code{TRUE} is an error.
+GlycanGT and GIFFLAR never download weights; explicitly supplying \code{TRUE} is an error.
 For SweetNet, this policy and the cache directory are stored in the encoder and reused
 during transformation. Loading the package does not access the network.}
 
@@ -89,7 +92,8 @@ All vectors use \code{encoder$features} as their names, including zero entries.
 \code{fit_fingerprint()} returns a \code{glyfp_encoder} list containing \code{features},
 \code{method}, \code{params}, \code{schema_version}, and \code{versions}. For SweetNet, \code{features}
 are \code{sweetnet_001} through \code{sweetnet_128}; for GlycanGT they are
-\code{glycangt_001} through \code{glycangt_768}. \code{params$model} fixes model metadata.
+\code{glycangt_001} through \code{glycangt_768}; for GIFFLAR they are
+\code{gifflar_001} through \code{gifflar_384}. \code{params$model} fixes model metadata.
 }
 \description{
 \code{glycan_fingerprint()} fits a dictionary on the supplied batch, then transforms
@@ -185,6 +189,20 @@ This adapter does not claim to reproduce published downstream performance.
 Keep the serialized encoder and local checkpoint together. A changed model,
 identifier policy, vocabulary, implementation or dependency version requires
 recomputing all compared embeddings. No weights or model pointers are serialized.
+
+GIFFLAR uses the official glycowork species checkpoint and concatenates mean
+atom, bond and monosaccharide representations (384 coordinates). Its native
+molecular graph builder uses 27 fixed residue templates, including common
+N-acetyl, uronic-acid, sialic-acid, sulfated and phosphorylated residues; see
+the Get started article for the full list. It requires concrete internal
+linkages and an unspecified normal reducing end. Unsupported templates,
+anomeric-to-anomeric bonds and modification-dependent attachments are rejected.
+The model preserves the upstream atom and bond features, ring relations,
+directed linkage features and pooling; it does not require Python, RDKit or
+GlyLES. Every transform validates the checkpoint, templates, vocabulary and
+implementation metadata. Computation uses CPU float32, one glycan at a time,
+with no random identifiers. Missing inputs yield 384 \code{NA_real_} coordinates.
+GIFFLAR, SweetNet and GlycanGT coordinate spaces must not be combined.
 }
 \examples{
 library(glyrepr)

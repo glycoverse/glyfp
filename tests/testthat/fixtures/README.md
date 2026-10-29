@@ -74,3 +74,29 @@ with graph-derived seeds recorded alongside each canonical input. Both original
 vocabulary JSON blobs match the pinned Hugging Face repository metadata exactly.
 This tests numerical equivalence under the recorded ORF policy; it does not
 reproduce stochastic larger minibatches or claim downstream benchmark accuracy.
+
+## GIFFLAR molecular graphs and networks
+
+`gifflar-reference.rds` contains 86 molecular graphs and 384-dimensional outputs
+from the official MIT-licensed glycowork implementation at commit
+`199efdde6bc137dbbcd900f84f927fdbbca52eae`. All 353 tensors of the official
+`glycowork_gifflar_species.pt` state dictionary loaded strictly. The checkpoint
+SHA-256 is `0dab7c3b61aad95dab37d4974da4b57b3fd985128dc09ad5da846e82adb9519d`,
+from Hugging Face revision `52187c054b9c988ddb2a5a5af9ee64b51004fd1e`.
+Only graph arrays and model outputs are bundled, not pretrained weights.
+
+The upstream `smiles.py`, `GIFFLARTransform`, collator and model bodies generated
+these graphs and outputs. Memoization was disabled for the reference export;
+installed glycowork 1.9 supplied the initial directed residue graph. The pinned
+upstream vocabulary was independently downloaded and compared: all 2451 token
+indices exactly equal the shared TSV resource. Every supported residue was
+checked alone and as both alpha/beta donor to Gal, plus branched and modified
+examples. Native tests compare SMILES, node features, all six relation multisets
+and directed linkage attributes, then real-model outputs at tolerance 1e-5.
+
+`gifflar-untrained.rds` contains ordinary arrays from a small independent upstream
+model: 8 features, 2 layers, 3 classification outputs, initialization seed 4287.
+Its 24-coordinate pooled outputs exercise native network operations without a
+pretrained checkpoint. It is deliberately UNTRAINED, not a pretrained substitute.
+Development-only reference/export scripts are retained outside the package in
+`glyfp-development-notes/gifflar/`; Python is never used by the R package.

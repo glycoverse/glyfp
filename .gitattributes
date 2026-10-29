@@ -4,3 +4,5 @@
 
 /inst/extdata/glycangt-*.tsv text eol=lf
 /tests/testthat/fixtures/glycangt-reference.csv text eol=lf
+
+/inst/extdata/gifflar-templates.tsv text eol=lf

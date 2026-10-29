@@ -34,3 +34,13 @@ runs one canonical graph at a time with a recorded deterministic ORF seed policy
 The bundled monomer and linkage vocabulary tables derive from the same public
 repository, preserving indices and appending the upstream [MASK] token.
 The small test model is untrained and is not a distributed pretrained checkpoint.
+
+GIFFLAR native network and molecular preprocessing: adapted from MIT-licensed
+glycowork commit 199efdde6bc137dbbcd900f84f927fdbbca52eae.
+https://github.com/BojarLab/glycowork
+The MIT notice above applies. Residue templates are derived from the public
+SKELETONS and _residue implementation in glycowork/motif/smiles.py. The R port
+uses 27 explicitly supported residues with fixed-position modifications and
+rejects other chemistry. Its network, graph construction and parser are
+reimplemented in R. The shared vocabulary matches the pinned v12_lib.pkl
+indices exactly. Pretrained weights are not distributed in this package.

@@ -24,3 +24,11 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+GlycanGT native inference kernel: R reimplementation adapted from
+matsui-lab/GlycanGT commit 96611518c971deb89215ca163deaf9de3a59fa32.
+https://github.com/matsui-lab/GlycanGT
+The upstream code is distributed under Apache-2.0; the license is included in
+licenses/GlycanGT-LICENSE. The R port changes the implementation language and
+runs one canonical graph at a time with a recorded deterministic ORF seed policy.
+The small test model is untrained and is not a distributed pretrained checkpoint.

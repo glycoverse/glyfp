@@ -94,11 +94,11 @@ motif_features <- function(max_size) {
   dictionary$motif[dictionary$size <= max_size]
 }
 
-motif_fingerprints <- function(glycans, max_size, unknown, binary) {
-  features <- motif_features(max_size)
+motif_fingerprints <- function(glycans, max_size, unknown, binary, motif_dict) {
   valid <- which(!is.na(glycans))
   unique_glycans <- unique(glycans[valid])
   extracted <- extract_features(unique_glycans, max_size)
+  features <- if (motif_dict == "fixed") motif_features(max_size) else extracted
   unseen <- setdiff(extracted, features)
   if (length(unseen) && unknown != "ignore") {
     message <- c(

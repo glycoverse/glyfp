@@ -9,6 +9,7 @@ fp_motif_count(
   glycans,
   ...,
   max_size = 3L,
+  motif_dict = "fixed",
   unknown = "ignore",
   na_action = "propagate"
 )
@@ -17,6 +18,7 @@ fp_motif_binary(
   glycans,
   ...,
   max_size = 3L,
+  motif_dict = "fixed",
   unknown = "ignore",
   na_action = "propagate"
 )
@@ -34,9 +36,16 @@ alpha/beta state. Unknown or ambiguous fields raise an error.}
 \item{max_size}{Maximum residues per connected motif, an integer from 1 to 7.
 The default 3 selects all mono-, di- and trisaccharides, including branches.}
 
+\item{motif_dict}{\code{"fixed"} (default) uses the built-in glydb dictionary;
+\code{"dynamic"} builds a dictionary from the non-missing glycans in this call.
+Dynamic dictionaries may differ across batches, so independently computed
+vectors cannot be assumed to have aligned coordinates.}
+
 \item{unknown}{\code{"ignore"} (default), \code{"warn"} or \code{"error"} controls motifs
 absent from the fixed dictionary. Known motifs are still counted; new
-coordinates are never added. This does not permit uncertain input structures.}
+coordinates are never added in fixed mode. In dynamic mode, all extracted
+motifs are included, so this option has no effect. Neither mode permits
+uncertain input structures.}
 
 \item{na_action}{\code{"propagate"} (default) returns an all-NA vector for each
 missing input; \code{"error"} rejects missing inputs.}
@@ -47,9 +56,9 @@ names. Motif coordinates are named by canonical structure. Zero and NA
 entries retain all coordinates. No dictionary object is returned.
 }
 \description{
-\code{fp_motif_count()} counts connected motifs in each glycan using a fixed
-built-in dictionary. \code{fp_motif_binary()} records their presence or absence.
-Each glycan's coordinates are independent of other glycans in the input batch.
+\code{fp_motif_count()} counts connected motifs in each glycan.
+\code{fp_motif_binary()} records their presence or absence. By default, both use
+a fixed built-in dictionary, independent of other glycans in the input batch.
 }
 \details{
 The built-in dictionary \verb{glydb-2.12.1-complete-v1} contains 24,124 canonical
@@ -60,6 +69,17 @@ or folding. The dictionary does not grow or change with the input batch.
 Different \code{max_size} settings or future dictionary versions define different
 coordinate sets. Coverage is limited to this source snapshot; unseen motifs
 follow \code{unknown}. See the Get started article for provenance and exclusions.
+
+With \code{motif_dict = "dynamic"}, each call constructs its own dictionary from
+all motifs up to \code{max_size} in the supplied non-missing structures, including
+motifs absent from glydb. Unique features are sorted by UTF-8 bytes, so input
+order and duplicates do not affect the dictionary. Different batches may
+produce different dictionaries, even at equal vector lengths; combine glycans
+in one call to ensure aligned dynamic coordinates. Empty input returns
+\code{list()}. An all-missing dynamic batch has no features and returns one named
+zero-length integer vector per input; retain the original missingness mask
+because a zero-length vector cannot hold an NA value. A missing input in a
+mixed batch has all-NA entries for that batch's dynamic dictionary.
 
 Features use \code{\link[glymotif:extract_motif]{glymotif::extract_motif()}} and \code{\link[glymotif:count_motif]{glymotif::count_motifs()}} with
 substructure alignment, linkages included, strict substituent matching and
@@ -86,6 +106,8 @@ identical(c(fp_a, fp_b), fp_motif_count(c(a, b)))
 fp_a[[1]][c("Gal(b1-", "Gal(b1-3)Gal(b1-")]
 lengths(fp_b)
 identical(fp_motif_binary(a), lapply(fp_a, \(x) 1L * (x > 0L)))
+dynamic <- fp_motif_count(a, motif_dict = "dynamic")
+dynamic[[1]]
 }
 \seealso{
 \code{\link[=fp_sweetnet]{fp_sweetnet()}}, \code{\link[=fp_glycangt]{fp_glycangt()}}, \code{\link[=fp_gifflar]{fp_gifflar()}}

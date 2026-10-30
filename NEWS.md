@@ -6,6 +6,8 @@
 
 ## Fingerprints
 
+* `fp_motif_count()` and `fp_motif_binary()` accept `motif_dict = "dynamic"` to build a sorted dictionary from the current batch, including motifs outside glydb. Independent batches may define different coordinates; the default `motif_dict = "fixed"` preserves the existing stable dictionary and outputs.
+
 * `fp_motif_binary()` and `fp_motif_count()` encode glyrepr structure vectors and glyparse-supported text as lists of binary or count fingerprints of connected residue substructures. Each method has its own API and exposes only relevant options.
 * Substructure methods use the fixed `glydb-2.12.1-complete-v1` dictionary, derived from 8,211 complete structures. The default 3,173 coordinates remain aligned across batches. Unseen motifs can be ignored, warned about or rejected without changing dimensions.
 * All methods require complete structures, including the reducing-end alpha/beta state. Motif fingerprints retain that state; pretrained embeddings explicitly project it out because their models do not represent it. Unknown structure fields are rejected before inference.

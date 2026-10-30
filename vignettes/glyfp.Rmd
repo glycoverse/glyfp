@@ -30,7 +30,7 @@ with `fp_motif_count(x, max_size = 2)`, and `glycan_fingerprint(x, "sweetnet")`
 with `fp_sweetnet(x)`. Default calls `glycan_fingerprint(x)` become
 `fp_motif_binary(x)`. The resulting vectors and defaults are unchanged.
 
-`max_size` and `unknown` belong to the two motif functions. Only `fp_sweetnet()`
+`max_size`, `motif_dict` and `unknown` belong to the two motif functions. Only `fp_sweetnet()`
 accepts `cache_dir` and `download`. For GlycanGT and GIFFLAR, pass the required
 local `checkpoint` and omit any former `download = FALSE` argument. All five
 functions accept `na_action`; embedding functions always reject unknown tokens.
@@ -61,8 +61,8 @@ stopifnot(identical(c(fp_a, fp_b),
                    fp_motif_count(c(a, b))))
 ```
 
-The same glycan receives the same coordinates alone, in another batch, or in
-another order. Other inputs never redefine its dictionary. Text parsing is
+With the default `motif_dict = "fixed"`, the same glycan receives the same
+coordinates alone, in another batch, or in another order. Other inputs never redefine its dictionary. Text parsing is
 delegated to glyparse; equivalent objects yield the same values.
 
 ```{r}
@@ -81,7 +81,7 @@ ends <- fp_motif_binary(c("Gal(a1-", "Gal(b1-"))
 lapply(ends, function(x) x[c("Gal(a1-", "Gal(b1-")])
 ```
 
-### Dictionary source and coverage
+### Fixed dictionary source and coverage
 
 The built-in dictionary is **`glydb-2.12.1-complete-v1`**. It uses glydb
 0.7.2.9000 at commit `cafa287eac546a9899977a9e8c777af77cfd2ac3`, whose structures
@@ -115,7 +115,7 @@ That paper uses 1–7-residue connected subtrees and hashed/folded binary string
 it does not supply this fixed explicit dictionary. glyfp does not reproduce its
 dataset-dependent occupancy correction or modified Tanimoto score.
 
-An unseen motif never adds coordinates. `unknown = "ignore"` counts only known
+With `motif_dict = "fixed"`, an unseen motif never adds coordinates. `unknown = "ignore"` counts only known
 motifs; `"warn"` also warns and `"error"` rejects unseen motifs. This policy
 controls dictionary coverage, not uncertain input: unknown structural fields
 are always rejected. Different `max_size` values or dictionary versions define
@@ -131,6 +131,42 @@ saveRDS(fp_a, path)
 stopifnot(identical(readRDS(path), fp_a))
 unlink(path)
 ```
+
+### Dynamic dictionaries
+
+Set `motif_dict = "dynamic"` in either motif function to construct a dictionary
+from the non-missing glycans supplied in that call. It includes all connected
+motifs up to `max_size`, even if they are absent from the built-in glydb dictionary.
+Counting, binary thresholding and complete-structure validation are unchanged.
+
+```{r}
+dynamic <- fp_motif_count(a, motif_dict = "dynamic")
+dynamic[[1]]
+stopifnot(identical(fp_motif_count(rev(a), motif_dict = "dynamic"), rev(dynamic)))
+stopifnot(identical(fp_motif_binary(a, motif_dict = "dynamic"),
+                   lapply(dynamic, function(x) 1L * (x > 0L))))
+```
+
+Each call rebuilds the dictionary, but it need not be different: batches with the
+same set of motifs produce the same dictionary. Unique canonical features are
+sorted by UTF-8 bytes, independent of input order and duplicates. Different batches
+**may** have different coordinates, including when vector lengths match. Combine
+all glycans to be compared in one call to ensure aligned dynamic coordinates:
+
+```{r}
+combined <- fp_motif_count(c(a, b), motif_dict = "dynamic")
+part_a <- combined[seq_along(a)]
+part_b <- combined[length(a) + seq_along(b)]
+stopifnot(identical(names(part_a[[1]]), names(part_b[[1]])))
+```
+
+`unknown` has no effect in dynamic mode because every extracted motif is included.
+It never permits uncertain structures. Empty input returns `list()`. An all-NA
+batch has an empty dictionary and returns one named zero-length integer vector
+per input; keep the original missingness mask because zero dimensions cannot
+represent NA. Missing entries in a mixed batch have all-NA vectors with that
+batch's full dictionary. `na_action = "error"` rejects missing inputs in either
+mode. Dynamic mode does not change the bundled dictionary or later fixed calls.
 
 ## Pretrained embeddings
 

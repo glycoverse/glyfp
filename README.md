@@ -79,7 +79,11 @@ fp[[1]][c("Gal(b1-", "Gal(b1-3)Gal(b1-")]
 
 The repeated disaccharide is counted twice, including overlapping
 occurrences. Use `fp_motif_binary(glycans)` for presence/absence. The
-fixed dictionary keeps coordinates aligned across separate calls. Inputs
-must specify complete structures, including the reducing-end anomer. The
-[getting-started vignette](vignettes/glyfp.Rmd) explains all methods,
-pretrained checkpoints and supported chemistry.
+default `motif_dict = "fixed"` keeps coordinates aligned across separate
+calls. Set `motif_dict = "dynamic"` in either motif function to build a
+dictionary from the current batch, including motifs outside glydb.
+Dynamic dictionaries may differ between batches; combine inputs in one
+call for aligned coordinates. Inputs must specify complete structures,
+including the reducing-end anomer. The [getting-started
+vignette](vignettes/glyfp.Rmd) explains all methods, pretrained
+checkpoints and supported chemistry.

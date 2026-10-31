@@ -6,6 +6,9 @@
 
 ## Fingerprints
 
+* `fp_circular()` encodes residue-centered WL neighborhoods into fixed hashed binary or count vectors, retaining represented residue chemistry, directed linkage labels and reducing-end state without fitting a dictionary.
+* `fp_residue_pair()` encodes endpoint WL environments and glycosidic-edge graph distances into fixed hashed vectors. Distinct unordered pairs count once; single residues yield all-zero vectors. Both new functions document collision behavior and representation limits.
+
 * `fp_motif_count()` and `fp_motif_binary()` accept `motif_dict = "dynamic"` to build a sorted dictionary from the current batch, including motifs outside glydb. Independent batches may define different coordinates; the default `motif_dict = "fixed"` preserves the existing stable dictionary and outputs.
 
 * `fp_motif_binary()` and `fp_motif_count()` encode glyrepr structure vectors and glyparse-supported text as lists of binary or count fingerprints of connected residue substructures. Each method has its own API and exposes only relevant options.

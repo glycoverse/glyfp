@@ -2,6 +2,8 @@ test_that("motif APIs use fixed coordinates across independent batches", {
   expect_setequal(
     getNamespaceExports("glyfp"),
     c(
+      "fp_circular",
+      "fp_residue_pair",
       "fp_motif_binary",
       "fp_motif_count",
       "fp_sweetnet",

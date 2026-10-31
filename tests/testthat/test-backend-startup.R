@@ -38,6 +38,8 @@ test_that("structural methods do not load torch in a fresh R process", {
       inputs <- glyfp:::sweetnet_inputs(glyparse::auto_parse("Gal"))
       glyfp::fp_motif_binary("Gal(b1-")
       glyfp::fp_motif_count("Gal(b1-")
+      glyfp::fp_circular("Gal(b1-")
+      glyfp::fp_residue_pair("Gal(b1-")
       !"torch" %in% loadedNamespaces()
     },
     args = list(package = getNamespaceInfo("glyfp", "path")),

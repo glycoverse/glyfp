@@ -44,7 +44,8 @@ glycoverse](https://github.com/glycoverse/glycoverse#installation).
 -   🚀 Get started: [Get started with glyfp](vignettes/glyfp.Rmd)
 -   📚 Reference: [Motif fingerprints](man/fp_motif_count.Rd),
     [SweetNet](man/fp_sweetnet.Rd), [GlycanGT](man/fp_glycangt.Rd),
-    [GIFFLAR](man/fp_gifflar.Rd)
+    [GIFFLAR](man/fp_gifflar.Rd), [circular](man/fp_circular.Rd),
+    [residue pairs](man/fp_residue_pair.Rd)
 
 These links point to the local source documentation until the package
 website is published. After installation, use
@@ -84,6 +85,8 @@ calls. Set `motif_dict = "dynamic"` in either motif function to build a
 dictionary from the current batch, including motifs outside glydb.
 Dynamic dictionaries may differ between batches; combine inputs in one
 call for aligned coordinates. Inputs must specify complete structures,
-including the reducing-end anomer. The [getting-started
-vignette](vignettes/glyfp.Rmd) explains all methods, pretrained
-checkpoints and supported chemistry.
+including the reducing-end anomer. Use `fp_circular()` for hashed
+residue neighborhoods or `fp_residue_pair()` for endpoint environments
+and graph distances, with fixed dimensions across batches. The
+[getting-started vignette](vignettes/glyfp.Rmd) explains all methods,
+pretrained checkpoints and supported chemistry.

@@ -18,6 +18,8 @@ be glyrepr structure vectors or text in formats supported by glyparse.
 |---|---|---|
 | `fp_motif_binary()` | Presence/absence; 3,173 dimensions by default | Fixed glydb motif dictionary |
 | `fp_motif_count()` | Overlapping occurrences; same dimensions | Same fixed dictionary |
+| `fp_circular()` | 2,048 binary bins by default; optional counts | Residue-centered WL neighborhoods, radii 0–2 by default |
+| `fp_residue_pair()` | 2,048 binary bins by default; optional counts | Endpoint environments plus graph distances |
 | `fp_sweetnet()` | 128 pretrained features | SweetNet v2 by default; legacy v1 also supported |
 | `fp_glycangt()` | 768 pretrained graph Transformer features | Large mask-35 model; local checkpoint required |
 | `fp_gifflar()` | 384 pretrained molecular graph features | Species model; local checkpoint required |
@@ -32,7 +34,7 @@ with `fp_sweetnet(x)`. Default calls `glycan_fingerprint(x)` become
 
 `max_size`, `motif_dict` and `unknown` belong to the two motif functions. Only `fp_sweetnet()`
 accepts `cache_dir` and `download`. For GlycanGT and GIFFLAR, pass the required
-local `checkpoint` and omit any former `download = FALSE` argument. All five
+local `checkpoint` and omit any former `download = FALSE` argument. All fingerprint
 functions accept `na_action`; embedding functions always reject unknown tokens.
 
 Every method processes complete structures. Specify concrete residues, all
@@ -167,6 +169,124 @@ per input; keep the original missingness mask because zero dimensions cannot
 represent NA. Missing entries in a mixed batch have all-NA vectors with that
 batch's full dictionary. `na_action = "error"` rejects missing inputs in either
 mode. Dynamic mode does not change the bundled dictionary or later fixed calls.
+
+## Circular and residue-pair fingerprints
+
+`fp_circular()` and `fp_residue_pair()` offer fixed-size, dictionary-free
+representations computed entirely in R. They need neither model weights nor a
+torch runtime. Both default to `n_bits = 2048` and `mode = "binary"`; use
+`mode = "count"` for occurrence counts. Inputs undergo the same complete-structure
+checks as motif methods. These methods retain the specified reducing-end state;
+they do not apply the embedding models' root projection.
+
+```{r}
+x <- c("Gal(b1-4)GlcNAc(b1-", "Gal(b1-3)GlcNAc(b1-", NA_character_)
+circular <- fp_circular(x)
+pairs <- fp_residue_pair(x)
+stopifnot(identical(fp_circular(x[1]), circular[1]))
+stopifnot(identical(fp_residue_pair(rev(x)), rev(pairs)))
+lengths(circular)
+```
+
+### Encoding rules
+
+Circular encoding starts with each concrete residue label and its represented
+stereochemistry, positioned substituents, its own anomer/donor carbon, and a
+reducing-end flag. The root retains its explicit alpha/beta state. Each
+Weisfeiler-Lehman (WL) round combines the previous label with a sorted multiset
+of neighbor messages: the neighbor label, full glycosidic linkage, and whether
+the center acts as donor or acceptor. The default `radius = 2` records one feature
+per residue at each radius 0, 1 and 2. Repeated environments count repeatedly;
+radii are distinguished, even for single residues. Consequently count vectors
+sum to `number_of_residues * (radius + 1)`.
+
+Residue-pair encoding uses the same WL construction, with default `radius = 1`
+for each endpoint. Only the final endpoint radius is used. Each distinct
+unordered pair contributes a feature consisting of its sorted endpoint labels
+and undirected shortest glycosidic-edge distance. All distances are included.
+This is graph distance, not 3D distance. Count vectors sum to `n * (n - 1) / 2`.
+No self-pairs are included, so **all single-residue glycans have an all-zero
+residue-pair fingerprint**; circular or motif features can distinguish them.
+
+```{r}
+vapply(fp_circular(x[1:2], mode = "count"), sum, 0)
+vapply(fp_residue_pair(x[1:2], mode = "count"), sum, 0)
+```
+
+Encoding version 1 packs fields as byte-length-prefixed UTF-8 strings, uses
+SHA-256 for WL labels and method-specific features, and reduces the first 32
+bits of the final hash (big-endian) modulo `n_bits`. This avoids R serialization,
+random seeds and batch dictionaries. A bin accumulates every occurrence mapped
+to it; binary mode thresholds the final counts. **Different features can collide.**
+For example, `n_bits = 1` maps every feature to the same bin. Increasing the vector
+length reduces folding collisions without recovering structural information
+omitted by the feature definition. Bin names record the method, version, radius,
+dimension and mode. Compare outputs only with the same settings and compatible
+package/dependency versions. Fixed hashing does not make fingerprints reversible
+or unique identifiers for glycans.
+
+The bounded `radius` range is 0–10 and `n_bits` is 1–1,048,576. Radius counts graph
+edges, not the ECFP diameter convention. Circular environments can miss layout
+beyond their radius. Pair features add distances but omit the interior sequence
+of residues and linkage labels beyond their endpoint environments. With
+`radius = 0`, acceptor linkage positions are omitted by pair features. Absolute
+stereochemistry not represented in glyrepr labels is not reconstructed. Pair
+enumeration and its distance matrix require quadratic space in glycan size.
+Empty inputs return `list()`; missing inputs retain all `n_bits` entries as NA.
+
+These are residue-level designs inspired by
+[extended-connectivity fingerprints](https://doi.org/10.1021/ci100050t),
+[WL graph kernels](https://www.jmlr.org/papers/v12/shervashidze11a.html) and
+[atom-pair features](https://doi.org/10.1021/ci00046a002), not exact atom-level
+ECFP, atom-pair or MAP4 implementations. Circular counts include every center
+at every radius; they do not deduplicate repeated subgraphs across radii.
+
+### Controlled comparison with motif features
+
+The following small panel checks specific distinctions and failures. It is not
+a prediction benchmark or a claim of general superiority. Synthetic Gal/Man
+chains are used to control local motif content while changing longer-range
+layout; they are not asserted to be naturally occurring glycans. Motif counts
+use one dynamic dictionary per pair so coverage gaps in glydb do not confound
+the comparison. Hashed methods use count mode and their default radii and 2,048
+bins. Results could change with these settings or folding collisions.
+
+```{r}
+chain <- function(sequence) {
+  residues <- ifelse(strsplit(sequence, "", fixed = TRUE)[[1]] == "G", "Gal", "Man")
+  paste0(paste(residues, collapse = "(b1-4)"), "(b1-")
+}
+panel <- list(
+  linkage = c("Gal(b1-3)GlcNAc(b1-", "Gal(b1-4)GlcNAc(b1-"),
+  branches = c("Gal(b1-3)[GlcNAc(b1-6)]GalNAc(a1-",
+               "Gal(b1-6)[GlcNAc(b1-3)]GalNAc(a1-"),
+  reducing_end = c("Gal(b1-4)GlcNAc(a1-", "Gal(b1-4)GlcNAc(b1-"),
+  single_residue = c("Gal(b1-", "Man(b1-"),
+  chain_8 = vapply(c("GGGMGGGG", "GGGGMGGG"), chain, ""),
+  chain_20 = vapply(c("GGGGGGMGGGGGGGGGGGGG", "GGGGGGGMGGGGGGGGGGGG"), chain, "")
+)
+distinguishes <- function(x, encode) {
+  values <- encode(x)
+  !identical(values[[1]], values[[2]])
+}
+comparison <- data.frame(
+  case = names(panel),
+  motif_1_to_3 = vapply(panel, distinguishes, TRUE,
+    encode = function(x) fp_motif_count(x, motif_dict = "dynamic")),
+  circular_r2 = vapply(panel, distinguishes, TRUE,
+    encode = function(x) fp_circular(x, mode = "count")),
+  residue_pair_r1 = vapply(panel, distinguishes, TRUE,
+    encode = function(x) fp_residue_pair(x, mode = "count"))
+)
+knitr::kable(comparison, row.names = FALSE)
+```
+
+The 8-residue chains share the same counts of 1–3-residue motifs but differ in
+both hashed representations. The 20-residue chains also share the same local
+circular fingerprint at radius 2; endpoint distances separate this pair. In
+contrast, single-residue identity is lost entirely by the pair representation.
+These examples motivate combining complementary features when appropriate,
+while showing why no one of these representations guarantees structural identity.
 
 ## Pretrained embeddings
 

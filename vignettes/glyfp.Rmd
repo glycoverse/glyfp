@@ -18,7 +18,7 @@ be glyrepr structure vectors or text in formats supported by glyparse.
 |---|---|---|
 | `fp_motif_binary()` | Presence/absence; 3,173 dimensions by default | Fixed glydb motif dictionary |
 | `fp_motif_count()` | Overlapping occurrences; same dimensions | Same fixed dictionary |
-| `fp_circular()` | 2,048 binary bins by default; optional counts | Residue-centered WL neighborhoods, radii 0–2 by default |
+| `fp_circular_binary()` / `fp_circular_count()` | 2,048 binary / count bins by default | Residue-centered WL neighborhoods, radii 0–2 by default |
 | `fp_residue_pair()` | 2,048 binary bins by default; optional counts | Endpoint environments plus graph distances |
 | `fp_sweetnet()` | 128 pretrained features | SweetNet v2 by default; legacy v1 also supported |
 | `fp_glycangt()` | 768 pretrained graph Transformer features | Large mask-35 model; local checkpoint required |
@@ -172,18 +172,18 @@ mode. Dynamic mode does not change the bundled dictionary or later fixed calls.
 
 ## Circular and residue-pair fingerprints
 
-`fp_circular()` and `fp_residue_pair()` offer fixed-size, dictionary-free
+`fp_circular_binary()`, `fp_circular_count()` and `fp_residue_pair()` offer fixed-size, dictionary-free
 representations computed entirely in R. They need neither model weights nor a
-torch runtime. Both default to `n_bits = 2048` and `mode = "binary"`; use
-`mode = "count"` for occurrence counts. Inputs undergo the same complete-structure
+torch runtime. All default to `n_bits = 2048`. Use `fp_circular_count()` for circular
+occurrence counts, or `mode = "count"` with `fp_residue_pair()`. Inputs undergo the same complete-structure
 checks as motif methods. These methods retain the specified reducing-end state;
 they do not apply the embedding models' root projection.
 
 ```{r}
 x <- c("Gal(b1-4)GlcNAc(b1-", "Gal(b1-3)GlcNAc(b1-", NA_character_)
-circular <- fp_circular(x)
+circular <- fp_circular_binary(x)
 pairs <- fp_residue_pair(x)
-stopifnot(identical(fp_circular(x[1]), circular[1]))
+stopifnot(identical(fp_circular_binary(x[1]), circular[1]))
 stopifnot(identical(fp_residue_pair(rev(x)), rev(pairs)))
 lengths(circular)
 ```
@@ -209,7 +209,7 @@ No self-pairs are included, so **all single-residue glycans have an all-zero
 residue-pair fingerprint**; circular or motif features can distinguish them.
 
 ```{r}
-vapply(fp_circular(x[1:2], mode = "count"), sum, 0)
+vapply(fp_circular_count(x[1:2]), sum, 0)
 vapply(fp_residue_pair(x[1:2], mode = "count"), sum, 0)
 ```
 
@@ -274,7 +274,7 @@ comparison <- data.frame(
   motif_1_to_3 = vapply(panel, distinguishes, TRUE,
     encode = function(x) fp_motif_count(x, motif_dict = "dynamic")),
   circular_r2 = vapply(panel, distinguishes, TRUE,
-    encode = function(x) fp_circular(x, mode = "count")),
+    encode = function(x) fp_circular_count(x)),
   residue_pair_r1 = vapply(panel, distinguishes, TRUE,
     encode = function(x) fp_residue_pair(x, mode = "count"))
 )

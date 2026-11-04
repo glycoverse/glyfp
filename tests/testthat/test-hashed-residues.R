@@ -1,5 +1,11 @@
+# Exercise both public circular APIs in the shared mode-based checks.
+circular_encode <- function(glycans, ..., mode = "binary") {
+  encode <- if (mode == "binary") fp_circular_binary else fp_circular_count
+  encode(glycans, ...)
+}
+
 test_that("hashed residue methods validate parameters and complete structures", {
-  for (encode in list(fp_circular, fp_residue_pair)) {
+  for (encode in list(fp_circular_binary, fp_circular_count, fp_residue_pair)) {
     for (value in list(NULL, NA, Inf, -1, 11, 1.2, "2", c(1, 2))) {
       expect_error(
         encode("Gal(b1-", radius = value),
@@ -12,14 +18,6 @@ test_that("hashed residue methods validate parameters and complete structures", 
         class = "glyfp_error_argument"
       )
     }
-    expect_error(
-      encode("Gal(b1-", mode = "counts"),
-      class = "glyfp_error_argument"
-    )
-    expect_error(
-      encode("Gal(b1-", mode = c("binary", "count")),
-      class = "glyfp_error_argument"
-    )
     expect_error(
       encode("Gal(b1-", na_action = "omit"),
       class = "glyfp_error_argument"
@@ -48,7 +46,7 @@ test_that("fixed hash encodings agree with an independent SHA-256 calculation", 
   x <- "Gal(b1-4)GlcNAc(b1-"
   expected <- integer(2048)
   expected[c(345, 1836, 1828, 1191, 1280, 197)] <- 1L
-  expect_identical(unname(fp_circular(x, mode = "count")[[1]]), expected)
+  expect_identical(unname(circular_encode(x, mode = "count")[[1]]), expected)
   expected[] <- 0L
   expected[913] <- 1L
   expect_identical(unname(fp_residue_pair(x, mode = "count")[[1]]), expected)
@@ -68,7 +66,7 @@ test_that("coordinates do not depend on batches, graph numbering or serializatio
     absent = NA_character_,
     duplicate = "Gal(b1-3)[GlcNAc(b1-6)]GalNAc(a1-"
   )
-  for (encode in list(fp_circular, fp_residue_pair)) {
+  for (encode in list(circular_encode, fp_residue_pair)) {
     for (mode in c("binary", "count")) {
       fp <- encode(x, mode = mode)
       expect_identical(names(fp), names(x))
@@ -101,7 +99,7 @@ test_that("coordinates do not depend on batches, graph numbering or serializatio
         class = "glyfp_error_missing"
       )
       # Raw helper invariance does not rely on public re-canonicalization.
-      method <- if (identical(encode, fp_circular)) {
+      method <- if (identical(encode, circular_encode)) {
         "circular"
       } else {
         "residue_pair"
@@ -117,7 +115,7 @@ test_that("coordinates do not depend on batches, graph numbering or serializatio
     }
   }
   ct <- "RES\n1b:b-dgal-HEX-1:5"
-  for (encode in list(fp_circular, fp_residue_pair)) {
+  for (encode in list(circular_encode, fp_residue_pair)) {
     expect_identical(encode(ct), encode("Gal(b1-"))
   }
 })
@@ -131,7 +129,7 @@ test_that("linkages, branches, epimers, substitutions and root states are encode
     "Gal6S(b1-4)GlcNAc(b1-",
     "Gal(b1-4)GlcNAc(a1-"
   )
-  for (encode in list(fp_circular, fp_residue_pair)) {
+  for (encode in list(circular_encode, fp_residue_pair)) {
     fp <- encode(x)
     expect_length(unique(fp), length(x))
     branches <- encode(c(
@@ -148,12 +146,12 @@ test_that("linkages, branches, epimers, substitutions and root states are encode
 test_that("counts and binary folding have explicit occurrence and collision semantics", {
   x <- "Gal(b1-4)Gal(b1-4)Gal(b1-"
   for (radius in 0:3) {
-    a <- fp_circular(x, radius = radius, mode = "count")[[1]]
+    a <- circular_encode(x, radius = radius, mode = "count")[[1]]
     b <- fp_residue_pair(x, radius = radius, mode = "count")[[1]]
     expect_equal(sum(a), 3L * (radius + 1L))
     expect_equal(sum(b), choose(3, 2))
     expect_identical(
-      unname(fp_circular(x, radius = radius)[[1]]),
+      unname(circular_encode(x, radius = radius)[[1]]),
       unname(as.integer(a > 0))
     )
     expect_identical(
@@ -161,15 +159,15 @@ test_that("counts and binary folding have explicit occurrence and collision sema
       unname(as.integer(b > 0))
     )
     expect_equal(
-      sum(fp_circular("Gal(b1-", radius = radius, mode = "count")[[1]]),
+      sum(circular_encode("Gal(b1-", radius = radius, mode = "count")[[1]]),
       radius + 1L
     )
   }
-  for (encode in list(fp_circular, fp_residue_pair)) {
+  for (encode in list(circular_encode, fp_residue_pair)) {
     count <- encode(x, n_bits = 1, mode = "count")[[1]]
     binary <- encode(x, n_bits = 1)[[1]]
     expect_identical(unname(binary), 1L)
-    expect_equal(sum(count), if (identical(encode, fp_circular)) 9 else 3)
+    expect_equal(sum(count), if (identical(encode, circular_encode)) 9 else 3)
     # Deliberate folding collision: even different epimers become indistinguishable.
     collided <- encode(
       c("Gal(b1-4)GlcNAc(b1-", "Man(b1-4)GlcNAc(b1-"),
@@ -202,7 +200,7 @@ test_that("controlled chains expose complementary information and limitations", 
   for (i in seq_along(cases)) {
     x <- vapply(cases[[i]], chain, "", USE.NAMES = FALSE)
     motif <- fp_motif_count(x, motif_dict = "dynamic")
-    circular <- fp_circular(x, mode = "count")
+    circular <- circular_encode(x, mode = "count")
     pair <- fp_residue_pair(x, mode = "count")
     expect_identical(motif[[1]], motif[[2]])
     expect_identical(identical(circular[[1]], circular[[2]]), i == 2L)
@@ -213,10 +211,24 @@ test_that("controlled chains expose complementary information and limitations", 
 
 test_that("numeric display options do not affect feature hashes", {
   x <- "Gal(b1-4)GlcNAc(b1-4)Man(a1-"
-  circular <- fp_circular(x)
+  circular <- circular_encode(x)
   pairs <- fp_residue_pair(x)
   old <- options(scipen = -9, OutDec = ",", digits = 1)
   on.exit(options(old), add = TRUE)
-  expect_identical(fp_circular(x), circular)
+  expect_identical(circular_encode(x), circular)
   expect_identical(fp_residue_pair(x), pairs)
+})
+
+test_that("mode belongs only to the residue-pair API", {
+  expect_error(
+    fp_residue_pair("Gal(b1-", mode = "counts"),
+    class = "glyfp_error_argument"
+  )
+  expect_error(
+    fp_residue_pair("Gal(b1-", mode = c("binary", "count")),
+    class = "glyfp_error_argument"
+  )
+  for (encode in list(fp_circular_binary, fp_circular_count)) {
+    expect_error(encode("Gal(b1-", mode = "count"), "must be empty")
+  }
 })

@@ -3,14 +3,14 @@
 #' @description
 #' Computes a fixed-size hashed fingerprint from residue-level Weisfeiler-Lehman
 #' (WL) neighborhoods, without fitting a dictionary or training a model.
+#' `fp_circular_binary()` records occupied bins; `fp_circular_count()` sums
+#' feature occurrences, including repeated environments and collisions.
 #' @inheritParams fp_motif_count
 #' @param radius Maximum neighborhood radius in glycosidic edges, an integer
 #'   from 0 to 10. The default 2 includes radii 0, 1 and 2.
 #' @param n_bits Number of fixed hash bins, an integer from 1 to 1048576.
 #'   The default 2048 balances vector size and folding collisions; it is not
 #'   optimized for a particular prediction task.
-#' @param mode `"binary"` (default) records occupied bins; `"count"` sums feature
-#'   occurrences, including repeated environments and collisions in each bin.
 #' @details
 #' Encoding version 1 starts with the concrete residue label (including the
 #' stereochemistry it represents), positioned substituents, the residue's own
@@ -52,20 +52,36 @@
 #' @seealso [fp_residue_pair()], [fp_motif_count()], [fp_motif_binary()]
 #' @examples
 #' x <- c("Gal(b1-4)GlcNAc(b1-", "Gal(b1-3)GlcNAc(b1-")
-#' fp <- fp_circular(x)
+#' fp <- fp_circular_binary(x)
 #' lengths(fp)
-#' identical(fp_circular(x[1]), fp[1])
-#' sum(fp_circular(x[1], mode = "count")[[1]])
+#' identical(fp_circular_binary(x[1]), fp[1])
+#' sum(fp_circular_count(x[1])[[1]])
 #' @export
-fp_circular <- function(
+fp_circular_binary <- function(
   glycans,
   ...,
   radius = 2L,
   n_bits = 2048L,
-  mode = "binary",
   na_action = "propagate"
 ) {
   rlang::check_dots_empty()
+  circular_fingerprint(glycans, radius, n_bits, "binary", na_action)
+}
+
+#' @rdname fp_circular_binary
+#' @export
+fp_circular_count <- function(
+  glycans,
+  ...,
+  radius = 2L,
+  n_bits = 2048L,
+  na_action = "propagate"
+) {
+  rlang::check_dots_empty()
+  circular_fingerprint(glycans, radius, n_bits, "count", na_action)
+}
+
+circular_fingerprint <- function(glycans, radius, n_bits, mode, na_action) {
   validate_residue_options(radius, n_bits, mode)
   glycans <- complete_glycans(glycans, na_action)
   hashed_residue_fingerprints(

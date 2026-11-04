@@ -50,13 +50,13 @@ their endpoint environments and shortest glycosidic-edge distance.
 Every distinct unordered residue pair contributes one feature consisting of
 the lexically sorted endpoint labels and their undirected shortest-path length.
 Endpoints use the same residue labels, root information and directed linkage
-messages as \code{\link[=fp_circular]{fp_circular()}}. All distances are included; there is no cutoff.
+messages as \code{\link[=fp_circular_binary]{fp_circular_binary()}}. All distances are included; there is no cutoff.
 Distance is a number of glycosidic edges, not a 3D or spatial distance.
 
 A count vector sums to \code{n * (n - 1) / 2} for \code{n} residues. There are no
 self-pairs: a single-residue glycan yields an all-zero vector and cannot be
 distinguished from another single residue with this method. Use
-\code{\link[=fp_circular]{fp_circular()}} or motif features when that distinction matters.
+\code{\link[=fp_circular_binary]{fp_circular_binary()}} or motif features when that distinction matters.
 
 Endpoint environments can preserve local linkage and anomer information, but
 the feature does not record the sequence of residues or linkages along the
@@ -101,5 +101,5 @@ structure-activity studies: definition and applications.
 \doi{10.1021/ci00046a002}.
 }
 \seealso{
-\code{\link[=fp_circular]{fp_circular()}}, \code{\link[=fp_motif_count]{fp_motif_count()}}, \code{\link[=fp_motif_binary]{fp_motif_binary()}}
+\code{\link[=fp_circular_binary]{fp_circular_binary()}}, \code{\link[=fp_motif_count]{fp_motif_count()}}, \code{\link[=fp_motif_binary]{fp_motif_binary()}}
 }

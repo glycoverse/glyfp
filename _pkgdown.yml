@@ -5,7 +5,7 @@ development:
 reference:
 - title: Glycan fingerprints
   contents:
-  - fp_circular
+  - fp_circular_binary
   - fp_residue_pair
   - fp_motif_count
   - fp_sweetnet

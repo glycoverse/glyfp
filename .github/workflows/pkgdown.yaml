@@ -1,46 +1,47 @@
-# Adapted from the development workflows in glyenzy and glyanno.
-name: pkgdown
+# Workflow derived from https://github.com/r-lib/actions/tree/v2/examples
+# Need help debugging build failures? Start at https://github.com/r-lib/actions#where-to-find-help
 on:
   push:
     branches: [main, master]
   pull_request:
+  release:
+    types: [published]
   workflow_dispatch:
-permissions:
-  contents: read
-concurrency:
-  group: pkgdown-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+
+name: pkgdown.yaml
+
+permissions: read-all
+
 jobs:
   pkgdown:
     runs-on: ubuntu-latest
+    # Only restrict concurrency for non-PR jobs
+    concurrency:
+      group: pkgdown-${{ github.event_name != 'pull_request' || github.run_id }}
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v6
+
       - uses: r-lib/actions/setup-pandoc@v2
+
       - uses: r-lib/actions/setup-r@v2
-        with:
-          use-public-rspm: true
-          extra-repositories: 'https://glycoverse.r-universe.dev'
+
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
           extra-packages: any::pkgdown, local::.
           needs: website
-      - name: Require existing local favicon assets
-        run: test -s pkgdown/favicon/favicon.ico
+
       - name: Build site
-        shell: Rscript {0}
         run: pkgdown::build_site_github_pages(new_process = FALSE, install = FALSE)
-      - name: Include source documentation linked from the unpublished README
         shell: Rscript {0}
-        run: |
-          dir.create("docs/vignettes", showWarnings = FALSE)
-          dir.create("docs/man", showWarnings = FALSE)
-          stopifnot(file.copy("vignettes/glyfp.Rmd", "docs/vignettes", overwrite = TRUE))
-          stopifnot(file.copy(list.files("man", pattern = "[.]Rd$", full.names = TRUE), "docs/man", overwrite = TRUE))
-      - uses: actions/upload-artifact@v7
+
+      - name: Deploy to GitHub pages 🚀
+        if: github.event_name != 'pull_request'
+        uses: JamesIves/github-pages-deploy-action@d92aa235d04922e8f08b40ce78cc5442fcfbfa2f # v4.8.0
         with:
-          name: pkgdown-site
-          path: docs
-          if-no-files-found: error
-# Deployment is configured after a remote repository and Pages destination exist.
+          clean: false
+          branch: gh-pages
+          folder: docs

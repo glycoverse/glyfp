@@ -1,29 +1,4 @@
+url: https://glycoverse.github.io/glyfp/
 template:
   bootstrap: 5
-development:
-  mode: auto
-reference:
-- title: Glycan fingerprints
-  contents:
-  - fp_circular_binary
-  - fp_residue_pair
-  - fp_motif_count
-  - fp_sweetnet
-  - fp_glycangt
-  - fp_gifflar
-articles:
-- title: Getting started
-  navbar: ~
-  contents:
-  - glyfp
 
-# No canonical URL yet: this configuration builds local/CI preview artifacts.
-# Add the verified site URL only after a repository and deployment exist.
-navbar:
-  structure:
-    left: [intro, reference, news]
-    right: [search]
-
-# Preview-only package: avoid CRAN/Bioconductor status lookups.
-home:
-  sidebar: false

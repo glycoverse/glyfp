@@ -13,3 +13,4 @@ __pycache__/
 *.pyc
 *.pt
 *.pth
+docs

@@ -81,7 +81,8 @@ zero-length integer vector per input; retain the original missingness mask
 because a zero-length vector cannot hold an NA value. A missing input in a
 mixed batch has all-NA entries for that batch's dynamic dictionary.
 
-Features use \code{\link[glymotif:extract_motif]{glymotif::extract_motif()}} and \code{\link[glymotif:count_motif]{glymotif::count_motifs()}} with
+Features use \code{\link[glymotif:extract_motif]{glymotif::extract_motif()}} and
+\code{\link[glymotif:count_motif]{glymotif::count_motifs()}} with
 substructure alignment, linkages included, strict substituent matching and
 strict mode. Overlapping occurrences count separately; symmetric mappings of
 the same residue set count once. Binary values are \code{as.integer(count > 0)}.

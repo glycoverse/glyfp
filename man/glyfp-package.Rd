@@ -9,7 +9,7 @@
 Learn reusable dictionaries of connected glycan residue substructures.
 }
 \author{
-\strong{Maintainer}: Bin Fu \email{23110220018@m.fudan.edu.cn} (\href{https://orcid.org/0000-0001-8567-2997}{ORCID})
-
+Bin Fu \email{23110220018@m.fudan.edu.cn}
+(\href{https://orcid.org/0000-0001-8567-2997}{ORCID}), author and maintainer.
 }
 \keyword{internal}

@@ -20,6 +20,7 @@ knitr::opts_chunk$set(
 [![R-universe version](https://glycoverse.r-universe.dev/glyfp/badges/version)](https://glycoverse.r-universe.dev/glyfp)
 [![R-CMD-check](https://github.com/glycoverse/glyfp/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/glycoverse/glyfp/actions/workflows/R-CMD-check.yaml)
 [![Codecov test coverage](https://codecov.io/gh/glycoverse/glyfp/graph/badge.svg)](https://app.codecov.io/gh/glycoverse/glyfp)
+[![CRAN status](https://www.r-pkg.org/badges/version/glyfp)](https://CRAN.R-project.org/package=glyfp)
 <!-- badges: end -->
 
 The glyfp package represents glycans as fingerprints for comparison and modeling.

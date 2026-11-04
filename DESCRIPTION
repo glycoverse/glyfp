@@ -1,23 +1,27 @@
 Package: glyfp
 Title: Structural Fingerprints for Glycans
 Version: 0.0.0.9000
-Authors@R: person("Bin", "Fu", , "23110220018@m.fudan.edu.cn", role = c("aut", "cre"), comment = c(ORCID = "0000-0001-8567-2997"))
-Description: Encodes glycan structures as binary or count vectors of connected
-    residue substructures, circular residue neighborhoods, and residue-pair
-    graph distances. Motif fingerprints use a fixed dictionary derived from
-    complete structures in 'glydb' or a dictionary built from the current batch.
-    Residue identities, substituents, and glycosidic linkage labels are taken
-    from 'glyrepr' structures. Optionally computes pretrained
-    'SweetNet', 'GlycanGT', and 'GIFFLAR' embeddings using 'torch' for R on the CPU
-    and verified local model weights.
+Authors@R: 
+    person("Bin", "Fu", , "23110220018@m.fudan.edu.cn", role = c("aut", "cre"),
+           comment = c(ORCID = "0000-0001-8567-2997"))
+Description: Encodes glycan structures as binary or count vectors of
+    connected residue substructures, circular residue neighborhoods, and
+    residue-pair graph distances. Motif fingerprints use a fixed
+    dictionary derived from complete structures in 'glydb' or a dictionary
+    built from the current batch.  Residue identities, substituents, and
+    glycosidic linkage labels are taken from 'glyrepr' structures.
+    Optionally computes pretrained 'SweetNet', 'GlycanGT', and 'GIFFLAR'
+    embeddings using 'torch' for R on the CPU and verified local model
+    weights.
 License: MIT + file LICENSE
-Depends: R (>= 4.1)
+Depends: 
+    R (>= 4.1)
 Imports:
     cli,
     digest,
-    glyrepr (>= 1.2.0),
     glymotif (>= 1.0.0),
     glyparse (>= 0.8.1),
+    glyrepr (>= 1.2.0),
     igraph,
     rlang
 Suggests:
@@ -28,8 +32,9 @@ Suggests:
     testthat (>= 3.0.0),
     torch (>= 0.17.0),
     zip
+VignetteBuilder: 
+    knitr
 Config/testthat/edition: 3
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
-VignetteBuilder: knitr
 RoxygenNote: 7.3.3

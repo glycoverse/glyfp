@@ -10,3 +10,4 @@
 ^\.gitignore$
 ^pkgdown$
 ^\.gitattributes$
+^cran-comments\.md$

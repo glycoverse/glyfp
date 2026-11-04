@@ -2,7 +2,7 @@
 
 ## Breaking changes
 
-* `glycan_fingerprint()` is removed, so existing calls must migrate to `fp_motif_binary()`, `fp_motif_count()`, `fp_sweetnet()`, `fp_glycangt()` or `fp_gifflar()` according to the former `method`. Calls without `method` become `fp_motif_binary()`. Outputs and defaults are unchanged; `max_size` and `unknown` belong only to motif functions, and `cache_dir` and `download` belong only to SweetNet. For GlycanGT and GIFFLAR, supply the required local `checkpoint` and remove `download = FALSE`.
+* `glycan_fingerprint()` is removed, so existing calls must migrate to `fp_motif_binary()`, `fp_motif_count()`, `fp_sweetnet()`, `fp_glycangt()` or `fp_gifflar()` according to the former `method`. Calls without `method` become `fp_motif_binary()`. Outputs and defaults are unchanged; `max_size` and `unknown` belong only to motif functions, and `cache_dir` and `download` are available for SweetNet and GIFFLAR. For GlycanGT, supply the required local `checkpoint` and remove `download = FALSE`.
 
 ## Fingerprints
 
@@ -21,4 +21,4 @@
 
 * `fp_glycangt()` computes 768-dimensional pretrained graph Transformer embeddings entirely in R. It requires a manually downloaded official local checkpoint and never downloads weights. A fixed model, vocabulary and deterministic per-glycan orthogonal node identifiers keep its coordinates stable across batches.
 
-* `fp_gifflar()` adds 384-dimensional pretrained molecular graph embeddings using R torch and 27 fixed residue templates. It requires a verified local checkpoint, preserves atom, bond, ring and directed linkage information, and does not require Python or a chemistry toolkit.
+* `fp_gifflar()` adds 384-dimensional pretrained molecular graph embeddings using R torch and 27 fixed residue templates. It defaults to `checkpoint = "gifflar-species"` with automatic verified downloads, caching and `download = FALSE` for offline use; verified local files remain supported. It preserves atom, bond, ring and directed linkage information, and does not require Python or a chemistry toolkit.

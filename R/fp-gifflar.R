@@ -2,13 +2,14 @@
 #'
 #' @description
 #' Returns 384-dimensional molecular graph embeddings from the official
-#' GIFFLAR species model using a manually supplied local checkpoint.
+#' GIFFLAR species model with verified checkpoint downloads and caching.
 #' @inheritParams fp_motif_count
-#' @param checkpoint Local path to the official `glycowork_gifflar_species.pt`
-#'   artifact. Obtain it from
-#'   [DBojar/glycowork_models](https://huggingface.co/DBojar/glycowork_models).
-#'   The file is identified by SHA-256, regardless of filename, and is never
-#'   replaced or downloaded. A local checkpoint is required on every call.
+#' @param checkpoint `"gifflar-species"` (default), or the local path to the
+#'   official `glycowork_gifflar_species.pt` artifact. The named model downloads
+#'   from a pinned official revision on first use and is SHA-256 checked before
+#'   caching and loading. Local files are identified by SHA-256, regardless of
+#'   filename, and are never replaced or downloaded.
+#' @inheritParams fp_sweetnet
 #'
 #' @details
 #' GIFFLAR concatenates mean atom, bond and residue representations, using 27
@@ -30,18 +31,21 @@
 #'   lengths(fp)
 #' }
 #' @export
-fp_gifflar <- function(glycans, checkpoint, ..., na_action = "propagate") {
+fp_gifflar <- function(
+  glycans,
+  checkpoint = "gifflar-species",
+  ...,
+  cache_dir = tools::R_user_dir("glyfp", "cache"),
+  download = TRUE,
+  na_action = "propagate"
+) {
   rlang::check_dots_empty()
-  if (missing(checkpoint)) {
-    cli::cli_abort(
-      "GIFFLAR requires an explicit local {.arg checkpoint}; download the official weights yourself. glyfp never downloads GIFFLAR weights.",
-      class = "glyfp_error_argument"
-    )
-  }
   glycans <- complete_glycans(glycans, na_action)
   embedding_fingerprints(
     glycans,
-    run = \(x) gifflar_backend(x, checkpoint),
+    run = \(x) {
+      gifflar_backend(x, checkpoint, cache_dir = cache_dir, download = download)
+    },
     features = gifflar_features(),
     model = "gifflar"
   )

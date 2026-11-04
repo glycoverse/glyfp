@@ -46,7 +46,7 @@ test_that("embedding APIs preserve projection, batches, names and missingness", 
       expect_identical(checkpoint, "local.pt")
       produce(glycans, 768L)
     },
-    gifflar_backend = function(glycans, checkpoint) {
+    gifflar_backend = function(glycans, checkpoint, cache_dir, download) {
       expect_identical(checkpoint, "local.pt")
       produce(glycans, 384L)
     }

@@ -13,26 +13,25 @@ gifflar_spec <- function() {
 
 gifflar_features <- function() sprintf("gifflar_%03d", seq_len(384L))
 
-gifflar_checkpoint <- function(checkpoint) {
-  if (
-    !is.character(checkpoint) ||
-      length(checkpoint) != 1L ||
-      is.na(checkpoint) ||
-      !nzchar(checkpoint) ||
-      grepl("^[A-Za-z][A-Za-z0-9+.-]*://", checkpoint)
-  ) {
-    cli::cli_abort(
-      "GIFFLAR requires a local {.arg checkpoint} file downloaded from https://huggingface.co/DBojar/glycowork_models. No automatic download is performed.",
-      class = "glyfp_error_argument"
+gifflar_checkpoints <- function() {
+  spec <- gifflar_spec()
+  list(
+    `gifflar-species` = list(
+      revision = spec$checkpoint_revision,
+      file = "glycowork_gifflar_species.pt",
+      sha256 = spec$sha256
     )
-  }
-  if (!file.exists(checkpoint) || dir.exists(checkpoint)) {
-    cli::cli_abort(
-      "GIFFLAR checkpoint file does not exist: {.path {checkpoint}}.",
-      class = "glyfp_error_backend"
-    )
-  }
-  normalizePath(checkpoint, mustWork = TRUE)
+  )
+}
+
+gifflar_resolve <- function(checkpoint, cache_dir, download) {
+  checkpoint_resolve(
+    checkpoint,
+    cache_dir,
+    download,
+    gifflar_checkpoints(),
+    "GIFFLAR"
+  )
 }
 
 gifflar_dependencies <- function() {
@@ -82,8 +81,13 @@ gifflar_load_weights <- function(checkpoint) {
   .gifflar_state$weights
 }
 
-gifflar_backend <- function(glycans, checkpoint) {
-  checkpoint <- gifflar_checkpoint(checkpoint)
+gifflar_backend <- function(
+  glycans,
+  checkpoint,
+  cache_dir = tools::R_user_dir("glyfp", "cache"),
+  download = TRUE
+) {
+  checkpoint <- gifflar_resolve(checkpoint, cache_dir, download)$path
   restore_rng <- sweetnet_restore_rng()
   on.exit(restore_rng(), add = TRUE)
   gifflar_dependencies()

@@ -22,7 +22,7 @@ be glyrepr structure vectors or text in formats supported by glyparse.
 | `fp_residue_pair()` | 2,048 binary bins by default; optional counts | Endpoint environments plus graph distances |
 | `fp_sweetnet()` | 128 pretrained features | SweetNet v2 by default; legacy v1 also supported |
 | `fp_glycangt()` | 768 pretrained graph Transformer features | Large mask-35 model; local checkpoint required |
-| `fp_gifflar()` | 384 pretrained molecular graph features | Species model; local checkpoint required |
+| `fp_gifflar()` | 384 pretrained molecular graph features | Species model; automatic verified download |
 
 ### Migrating existing calls
 
@@ -33,7 +33,7 @@ with `fp_sweetnet(x)`. Default calls `glycan_fingerprint(x)` become
 `fp_motif_binary(x)`. The resulting vectors and defaults are unchanged.
 
 `max_size`, `motif_dict` and `unknown` belong to the two motif functions. Only `fp_sweetnet()`
-accepts `cache_dir` and `download`. For GlycanGT and GIFFLAR, pass the required
+and `fp_gifflar()` accept `cache_dir` and `download`. For GlycanGT, pass the required
 local `checkpoint` and omit any former `download = FALSE` argument. All fingerprint
 functions accept `na_action`; embedding functions always reject unknown tokens.
 
@@ -427,13 +427,15 @@ heterogeneous message passing. The R implementation follows the pinned
 It concatenates three independent means into 384 coordinates, not the 1,076
 classification scores. No Python, RDKit or GlyLES runtime is needed.
 
-Download `glycowork_gifflar_species.pt` (about 7.8 MB) from the
+On first use, `fp_gifflar()` downloads `glycowork_gifflar_species.pt` (about 7.8 MB) from the
 [official fixed revision](https://huggingface.co/DBojar/glycowork_models/tree/52187c054b9c988ddb2a5a5af9ee64b51004fd1e).
-The code and model card declare MIT licensing. glyfp requires a local file and
-never downloads GIFFLAR weights. SHA-256:
+The code and model card declare MIT licensing. Downloads are verified before caching. SHA-256:
 `0dab7c3b61aad95dab37d4974da4b57b3fd985128dc09ad5da846e82adb9519d`.
 Every call verifies it, including when tensors are already cached in memory.
-`fp_gifflar()` has no `cache_dir` or `download` argument.
+`checkpoint = "gifflar-species"` is the default. Use `cache_dir` to change the
+cache location and `download = FALSE` for offline use. Verified local paths are
+also accepted. Failed downloads leave no partial checkpoint; corrupt caches
+raise an error without being overwritten.
 
 ```{r, eval=FALSE}
 fp <- fp_gifflar(c("GlcNAc(b1-", "Gal6S(b1-4)GlcNAc(b1-", NA_character_),

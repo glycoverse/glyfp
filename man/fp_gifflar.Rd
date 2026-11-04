@@ -4,7 +4,14 @@
 \alias{fp_gifflar}
 \title{Encode Glycans with GIFFLAR}
 \usage{
-fp_gifflar(glycans, checkpoint, ..., na_action = "propagate")
+fp_gifflar(
+  glycans,
+  checkpoint = "gifflar-species",
+  ...,
+  cache_dir = tools::R_user_dir("glyfp", "cache"),
+  download = TRUE,
+  na_action = "propagate"
+)
 }
 \arguments{
 \item{glycans}{A \code{\link[glyrepr:glycan_structure]{glyrepr::glycan_structure()}} vector or a character vector
@@ -14,13 +21,19 @@ corresponding glyparse parser first. Structures must be complete: concrete
 residues, specified linkages, positions, substituents and reducing-end
 alpha/beta state. Unknown or ambiguous fields raise an error.}
 
-\item{checkpoint}{Local path to the official \code{glycowork_gifflar_species.pt}
-artifact. Obtain it from
-\href{https://huggingface.co/DBojar/glycowork_models}{DBojar/glycowork_models}.
-The file is identified by SHA-256, regardless of filename, and is never
-replaced or downloaded. A local checkpoint is required on every call.}
+\item{checkpoint}{\code{"gifflar-species"} (default), or the local path to the
+official \code{glycowork_gifflar_species.pt} artifact. The named model downloads
+from a pinned official revision on first use and is SHA-256 checked before
+caching and loading. Local files are identified by SHA-256, regardless of
+filename, and are never replaced or downloaded.}
 
 \item{...}{Reserved for future options. Must be empty.}
+
+\item{cache_dir}{Named-checkpoint cache directory. No directory is created
+for local checkpoints or offline cache misses.}
+
+\item{download}{Whether to download a missing named checkpoint. Set \code{FALSE}
+for offline use.}
 
 \item{na_action}{\code{"propagate"} (default) returns an all-NA vector for each
 missing input; \code{"error"} rejects missing inputs.}
@@ -32,7 +45,7 @@ return all-NA vectors with the full coordinate set. No model object is returned.
 }
 \description{
 Returns 384-dimensional molecular graph embeddings from the official
-GIFFLAR species model using a manually supplied local checkpoint.
+GIFFLAR species model with verified checkpoint downloads and caching.
 }
 \details{
 GIFFLAR concatenates mean atom, bond and residue representations, using 27

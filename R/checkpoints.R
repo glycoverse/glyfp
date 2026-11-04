@@ -46,14 +46,31 @@ sweetnet_download <- function(url, destfile) {
 }
 
 sweetnet_resolve <- function(checkpoint, cache_dir, download) {
+  checkpoint_resolve(
+    checkpoint,
+    cache_dir,
+    download,
+    sweetnet_checkpoints(),
+    "SweetNet"
+  )
+}
+
+checkpoint_resolve <- function(
+  checkpoint,
+  cache_dir,
+  download,
+  catalog,
+  model
+) {
   if (
     !is.character(checkpoint) ||
       length(checkpoint) != 1L ||
       is.na(checkpoint) ||
-      !nzchar(checkpoint)
+      !nzchar(checkpoint) ||
+      grepl("^[A-Za-z][A-Za-z0-9+.-]*://", checkpoint)
   ) {
     cli::cli_abort(
-      "{.arg checkpoint} must be {.val sweetnet-v1}, {.val sweetnet-v2}, or a local weight-file path.",
+      "{.arg checkpoint} must be a supported model name ({.or {names(catalog)}}) or a local weight-file path.",
       class = "glyfp_error_argument"
     )
   }
@@ -63,7 +80,6 @@ sweetnet_resolve <- function(checkpoint, cache_dir, download) {
       class = "glyfp_error_argument"
     )
   }
-  catalog <- sweetnet_checkpoints()
   if (!checkpoint %in% names(catalog)) {
     path <- sweetnet_path(checkpoint, "checkpoint")
     hash <- sweetnet_sha256(path)
@@ -74,7 +90,7 @@ sweetnet_resolve <- function(checkpoint, cache_dir, download) {
     )]
     if (length(id) != 1L) {
       cli::cli_abort(
-        "Local checkpoint SHA-256 does not match a supported official SweetNet artifact.",
+        "Local checkpoint SHA-256 does not match a supported official {model} artifact.",
         class = "glyfp_error_checksum"
       )
     }

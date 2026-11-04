@@ -30,7 +30,7 @@ test_that("model options and local-only checkpoints are enforced", {
   }
   expect_error(fp_sweetnet(x, download = NA), class = "glyfp_error_argument")
   expect_error(fp_sweetnet(x, cache_dir = NULL), class = "glyfp_error_argument")
-  for (encode in list(fp_glycangt, fp_gifflar)) {
+  for (encode in list(fp_glycangt)) {
     expect_error(encode(x), class = "glyfp_error_argument")
     expect_error(
       encode(x, checkpoint = tempfile()),

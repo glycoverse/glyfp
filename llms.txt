@@ -1,0 +1,122 @@
+# glyfp
+
+The glyfp package represents glycans as fingerprints for comparison and
+modeling. It provides binary and count fingerprints of connected glycan
+substructures and optional pretrained SweetNet, GlycanGT and GIFFLAR
+embeddings through
+[`fp_motif_binary()`](https://glycoverse.github.io/glyfp/reference/fp_motif_count.md),
+[`fp_motif_count()`](https://glycoverse.github.io/glyfp/reference/fp_motif_count.md),
+[`fp_sweetnet()`](https://glycoverse.github.io/glyfp/reference/fp_sweetnet.md),
+[`fp_glycangt()`](https://glycoverse.github.io/glyfp/reference/fp_glycangt.md)
+and
+[`fp_gifflar()`](https://glycoverse.github.io/glyfp/reference/fp_gifflar.md).
+Each function exposes only options relevant to its method. Inputs can be
+glyrepr structures or text in formats supported by glyparse.
+
+## Installation
+
+glyfp is under local development and is not yet available from CRAN,
+R-universe, or a remote repository. Install it from this package
+directory:
+
+``` r
+
+# install.packages("pak")
+pak::repo_add(glycoverse = "https://glycoverse.r-universe.dev")
+pak::local_install(".")
+```
+
+**Note:** Tips and troubleshooting for the meta-package
+[glycoverse](https://github.com/glycoverse/glycoverse) also apply here:
+[Installation of
+glycoverse](https://github.com/glycoverse/glycoverse#installation).
+
+## Documentation
+
+- 🚀 Get started: [Get started with
+  glyfp](https://glycoverse.github.io/glyfp/vignettes/glyfp.Rmd)
+- 📚 Reference: [Motif
+  fingerprints](https://glycoverse.github.io/glyfp/man/fp_motif_count.Rd),
+  [SweetNet](https://glycoverse.github.io/glyfp/man/fp_sweetnet.Rd),
+  [GlycanGT](https://glycoverse.github.io/glyfp/man/fp_glycangt.Rd),
+  [GIFFLAR](https://glycoverse.github.io/glyfp/man/fp_gifflar.Rd),
+  [circular](https://glycoverse.github.io/glyfp/man/fp_circular_binary.Rd),
+  [residue
+  pairs](https://glycoverse.github.io/glyfp/man/fp_residue_pair.Rd)
+
+These links point to the local source documentation until the package
+website is published. After installation, use
+[`help("fp_motif_count", package = "glyfp")`](https://glycoverse.github.io/glyfp/reference/fp_motif_count.md)
+and `browseVignettes("glyfp")`.
+
+## Role in `glycoverse`
+
+glyfp is being developed as part of the [Glycoverse
+ecosystem](https://github.com/glycoverse/glycoverse). It builds on
+glyrepr for glycan structures, glyparse for text parsing, and glymotif
+for substructure extraction and counting. Its fingerprints are intended
+as inputs to glycan comparison, clustering, and predictive workflows.
+
+## Example
+
+``` r
+
+library(glyfp)
+```
+
+Encode complete glycans using the built-in glydb motif dictionary:
+
+``` r
+
+glycans <- c("Gal(b1-3)Gal(b1-3)Gal(b1-", "Gal(b1-")
+fp <- fp_motif_count(glycans)
+lengths(fp)
+#> [1] 3173 3173
+fp[[1]][c("Gal(b1-", "Gal(b1-3)Gal(b1-")]
+#>          Gal(b1- Gal(b1-3)Gal(b1- 
+#>                3                2
+```
+
+The repeated disaccharide is counted twice, including overlapping
+occurrences. Use `fp_motif_binary(glycans)` for presence/absence. The
+default `motif_dict = "fixed"` keeps coordinates aligned across separate
+calls. Set `motif_dict = "dynamic"` in either motif function to build a
+dictionary from the current batch, including motifs outside glydb.
+Dynamic dictionaries may differ between batches; combine inputs in one
+call for aligned coordinates. Inputs must specify complete structures,
+including the reducing-end anomer. Use
+[`fp_circular_binary()`](https://glycoverse.github.io/glyfp/reference/fp_circular_binary.md)
+or
+[`fp_circular_count()`](https://glycoverse.github.io/glyfp/reference/fp_circular_binary.md)
+for hashed residue neighborhoods or
+[`fp_residue_pair()`](https://glycoverse.github.io/glyfp/reference/fp_residue_pair.md)
+for endpoint environments and graph distances, with fixed dimensions
+across batches. The [getting-started
+vignette](https://glycoverse.github.io/glyfp/vignettes/glyfp.Rmd)
+explains all methods, pretrained checkpoints and supported chemistry.
+
+# Package index
+
+## All functions
+
+- [`fp_circular_binary()`](https://glycoverse.github.io/glyfp/reference/fp_circular_binary.md)
+  [`fp_circular_count()`](https://glycoverse.github.io/glyfp/reference/fp_circular_binary.md)
+  : Encode Residue-Centered Circular Neighborhoods
+- [`fp_gifflar()`](https://glycoverse.github.io/glyfp/reference/fp_gifflar.md)
+  : Encode Glycans with GIFFLAR
+- [`fp_glycangt()`](https://glycoverse.github.io/glyfp/reference/fp_glycangt.md)
+  : Encode Glycans with GlycanGT
+- [`fp_motif_count()`](https://glycoverse.github.io/glyfp/reference/fp_motif_count.md)
+  [`fp_motif_binary()`](https://glycoverse.github.io/glyfp/reference/fp_motif_count.md)
+  : Encode Glycans as Motif Count or Binary Fingerprints
+- [`fp_residue_pair()`](https://glycoverse.github.io/glyfp/reference/fp_residue_pair.md)
+  : Encode Residue Environments and Graph Distances
+- [`fp_sweetnet()`](https://glycoverse.github.io/glyfp/reference/fp_sweetnet.md)
+  : Encode Glycans with SweetNet
+
+# Articles
+
+### All vignettes
+
+- [Get started with
+  glyfp](https://glycoverse.github.io/glyfp/articles/glyfp.md):

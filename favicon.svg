@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="424" height="489" viewBox="0 0 424 489" role="img" aria-labelledby="title desc"><metadata><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:dc="http://purl.org/dc/elements/1.1/"><rdf:Description><dc:creator>RealFaviconGenerator</dc:creator><dc:source>https://realfavicongenerator.net</dc:source></rdf:Description></rdf:RDF></metadata><title id="title">glyfp</title><desc id="desc">A glycan branch within fingerprint ridges, on a teal Glycoverse hexagonal badge.</desc><g id="badge">
+    <path fill="#416B69" d="M212 0 424 122.25V366.75L212 489 0 366.75V122.25Z"></path>
+    <path fill="#92C7C2" d="M212 13.85 412 129.18V359.82L212 475.15 12 359.82V129.18Z"></path>
+  </g><g id="fingerprint" fill="none" stroke="#FFFFFF" stroke-width="9" stroke-linecap="round">
+    <path d="M115 250v-46c0-54 43-97 97-97s97 43 97 97v34"></path>
+    <path d="M139 272v-68c0-40 33-73 73-73s73 33 73 73v43c0 15-2 29-6 41"></path>
+    <path d="M163 282v-78c0-27 22-49 49-49s49 22 49 49v37c0 19-3 37-10 54"></path>
+    <path d="M187 291v-87c0-14 11-25 25-25s25 11 25 25v38c0 20-4 39-12 56"></path>
+  </g><g id="glycan" stroke="#294E4D" stroke-width="5" stroke-linejoin="round">
+    <path d="M212 254v-43m0 0-35-32m35 32 35-32" fill="none" stroke-linecap="round"></path>
+    <rect x="199" y="242" width="26" height="26" fill="#2185B3"></rect>
+    <rect x="199" y="198" width="26" height="26" fill="#2185B3"></rect>
+    <circle cx="177" cy="179" r="14" fill="#F4C438"></circle>
+    <circle cx="247" cy="179" r="14" fill="#178964"></circle>
+  </g><text id="wordmark" x="212" y="366" text-anchor="middle" fill="#101918" font-family="Arial, Helvetica, sans-serif" font-size="50" font-weight="700"><tspan>gly</tspan><tspan font-style="italic">fp</tspan></text></svg>

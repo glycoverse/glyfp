@@ -1,0 +1,570 @@
+# Get started with glyfp
+
+The glyfp package provides a separate function for each structural
+fingerprint or pretrained glycan representation. Each returns a list of
+named vectors, one per input glycan, and exposes only options relevant
+to its method. Inputs can be glyrepr structure vectors or text in
+formats supported by glyparse.
+
+## Choose a method
+
+| Function | Coordinates | Source of features |
+|----|----|----|
+| [`fp_motif_binary()`](https://glycoverse.github.io/glyfp/reference/fp_motif_count.md) | Presence/absence; 3,173 dimensions by default | Fixed glydb motif dictionary |
+| [`fp_motif_count()`](https://glycoverse.github.io/glyfp/reference/fp_motif_count.md) | Overlapping occurrences; same dimensions | Same fixed dictionary |
+| [`fp_circular_binary()`](https://glycoverse.github.io/glyfp/reference/fp_circular_binary.md) / [`fp_circular_count()`](https://glycoverse.github.io/glyfp/reference/fp_circular_binary.md) | 2,048 binary / count bins by default | Residue-centered WL neighborhoods, radii 0–2 by default |
+| [`fp_residue_pair()`](https://glycoverse.github.io/glyfp/reference/fp_residue_pair.md) | 2,048 binary bins by default; optional counts | Endpoint environments plus graph distances |
+| [`fp_sweetnet()`](https://glycoverse.github.io/glyfp/reference/fp_sweetnet.md) | 128 pretrained features | SweetNet v2 by default; legacy v1 also supported |
+| [`fp_glycangt()`](https://glycoverse.github.io/glyfp/reference/fp_glycangt.md) | 768 pretrained graph Transformer features | Large mask-35 model; local checkpoint required |
+| [`fp_gifflar()`](https://glycoverse.github.io/glyfp/reference/fp_gifflar.md) | 384 pretrained molecular graph features | Species model; automatic verified download |
+
+### Migrating existing calls
+
+The former `glycan_fingerprint()` interface has been replaced by these
+functions. For example, replace
+`glycan_fingerprint(x, "substructure_count", max_size = 2)` with
+`fp_motif_count(x, max_size = 2)`, and
+`glycan_fingerprint(x, "sweetnet")` with `fp_sweetnet(x)`. Default calls
+`glycan_fingerprint(x)` become `fp_motif_binary(x)`. The resulting
+vectors and defaults are unchanged.
+
+`max_size`, `motif_dict` and `unknown` belong to the two motif
+functions. Only
+[`fp_sweetnet()`](https://glycoverse.github.io/glyfp/reference/fp_sweetnet.md)
+and
+[`fp_gifflar()`](https://glycoverse.github.io/glyfp/reference/fp_gifflar.md)
+accept `cache_dir` and `download`. For GlycanGT, pass the required local
+`checkpoint` and omit any former `download = FALSE` argument. All
+fingerprint functions accept `na_action`; embedding functions always
+reject unknown tokens.
+
+Every method processes complete structures. Specify concrete residues,
+all linkage positions and anomers, substituent positions, and the
+reducing-end alpha/beta state. For example, `Gal(b1-4)GlcNAc(b1-` is
+complete; `Gal(b1-4)GlcNAc` leaves the reducing-end state unknown and is
+rejected. Validation inspects normalized glyrepr graph fields for text
+and object inputs. Empty substituent fields mean no modification, not
+unknown chemistry. Alditols and unresolved floating
+components/substituents are outside scope. Missing inputs (`NA`) are
+supported separately from uncertain structures.
+
+## Substructure fingerprints
+
+``` r
+
+library(glyfp)
+a <- c("Galb3Galb3Galb-", "Galb-")
+b <- c("Gal(b1-4)GlcNAc(b1-", NA_character_)
+fp_a <- fp_motif_count(a)
+fp_b <- fp_motif_count(b)
+lengths(fp_a)
+#> [1] 3173 3173
+stopifnot(identical(c(fp_a, fp_b),
+                   fp_motif_count(c(a, b))))
+```
+
+With the default `motif_dict = "fixed"`, the same glycan receives the
+same coordinates alone, in another batch, or in another order. Other
+inputs never redefine its dictionary. Text parsing is delegated to
+glyparse; equivalent objects yield the same values.
+
+``` r
+
+objects <- glyparse::auto_parse(a)
+stopifnot(identical(fp_motif_count(objects), fp_a))
+fp_a[[1]][c("Gal(b1-", "Gal(b1-3)Gal(b1-")]
+#>          Gal(b1- Gal(b1-3)Gal(b1- 
+#>                3                2
+```
+
+Overlap counts: a Gal-Gal motif occurs twice in the three-Gal chain.
+Counts use glymotif’s strict substructure matching, including linkage
+and substituent labels. Symmetric mappings of the same residue set count
+once. Binary fingerprints are `as.integer(count > 0)`. Reducing-end
+alpha/beta information is retained:
+
+``` r
+
+ends <- fp_motif_binary(c("Gal(a1-", "Gal(b1-"))
+lapply(ends, function(x) x[c("Gal(a1-", "Gal(b1-")])
+#> [[1]]
+#> Gal(a1- Gal(b1- 
+#>       1       0 
+#> 
+#> [[2]]
+#> Gal(a1- Gal(b1- 
+#>       0       1
+```
+
+### Fixed dictionary source and coverage
+
+The built-in dictionary is **`glydb-2.12.1-complete-v1`**. It uses glydb
+0.7.2.9000 at commit `cafa287eac546a9899977a9e8c777af77cfd2ac3`, whose
+structures come from [GlyGen reviewed release
+2.12.1](https://data.glygen.org/ln2data/releases/data/v-2.12.1/reviewed/).
+Of 49,728 parsed source records, 8,416 accessions pass
+complete-structure checks, representing 8,211 unique structures. The
+other 41,312 records are excluded. Exclusion reasons overlap: 31,654
+uncertain reducing ends; 23,836 uncertain linkages; 6,218 floating
+parts; 4,443 alditols; 2,681 nonconcrete residues; 637 uncertain
+substituents; and 27 floating substituents. Before this step, glydb’s
+preparation excluded 10,266 parsing failures from 59,994 source records.
+Coverage therefore reflects that parser and source snapshot.
+
+Connected motifs include branches and all sizes up to `max_size`, not
+just fragments of exactly that size. The dictionary contains 24,124
+motifs with exact-size counts of 134, 906, 2,133, 3,110, 4,355, 5,849
+and 7,637 for sizes 1–7. The default `max_size = 3` selects 3,173
+features and retains mono- and disaccharide information. Features are
+canonical strings sorted by UTF-8 bytes; no hashing or folding is used.
+Higher sizes can require more enumeration work.
+
+The installed `extdata/motif-dictionary-metadata.R` records source and
+dictionary SHA-256 hashes, included-accession hash, exclusions and
+generator versions. The source repository’s
+`data-raw/build-motif-dictionary.R` reproduces the resource from the
+pinned glydb artifact. GlyGen database sets use [CC BY
+4.0](https://www.glygen.org/license/); attribution and changes are
+recorded in the installed `COPYRIGHTS` file. The glydb package code is
+MIT licensed.
+
+The connected-fragment design is informed by [*Glycan Fingerprints:
+Calculating Diversity in Glycan Libraries*
+(2012)](https://doi.org/10.1021/cb300003z) and its [official supporting
+information](https://acs.figshare.com/articles/journal_contribution/Glycan_Fingerprints_Calculating_Diversity_in_Glycan_Libraries/2521345).
+That paper uses 1–7-residue connected subtrees and hashed/folded binary
+strings; it does not supply this fixed explicit dictionary. glyfp does
+not reproduce its dataset-dependent occupancy correction or modified
+Tanimoto score.
+
+With `motif_dict = "fixed"`, an unseen motif never adds coordinates.
+`unknown = "ignore"` counts only known motifs; `"warn"` also warns and
+`"error"` rejects unseen motifs. This policy controls dictionary
+coverage, not uncertain input: unknown structural fields are always
+rejected. Different `max_size` values or dictionary versions define
+different coordinate sets. Save the method, options and glyfp version
+alongside results; recompute compared fingerprints after a dictionary
+change.
+
+``` r
+
+stopifnot(length(fp_motif_binary(character())) == 0L)
+missing <- fp_motif_binary(NA_character_)[[1]]
+stopifnot(length(missing) == 3173L, all(is.na(missing)))
+path <- tempfile(fileext=".rds")
+saveRDS(fp_a, path)
+stopifnot(identical(readRDS(path), fp_a))
+unlink(path)
+```
+
+### Dynamic dictionaries
+
+Set `motif_dict = "dynamic"` in either motif function to construct a
+dictionary from the non-missing glycans supplied in that call. It
+includes all connected motifs up to `max_size`, even if they are absent
+from the built-in glydb dictionary. Counting, binary thresholding and
+complete-structure validation are unchanged.
+
+``` r
+
+dynamic <- fp_motif_count(a, motif_dict = "dynamic")
+dynamic[[1]]
+#>                   Gal(b1-          Gal(b1-3)Gal(b1- Gal(b1-3)Gal(b1-3)Gal(b1- 
+#>                         3                         2                         1
+stopifnot(identical(fp_motif_count(rev(a), motif_dict = "dynamic"), rev(dynamic)))
+stopifnot(identical(fp_motif_binary(a, motif_dict = "dynamic"),
+                   lapply(dynamic, function(x) 1L * (x > 0L))))
+```
+
+Each call rebuilds the dictionary, but it need not be different: batches
+with the same set of motifs produce the same dictionary. Unique
+canonical features are sorted by UTF-8 bytes, independent of input order
+and duplicates. Different batches **may** have different coordinates,
+including when vector lengths match. Combine all glycans to be compared
+in one call to ensure aligned dynamic coordinates:
+
+``` r
+
+combined <- fp_motif_count(c(a, b), motif_dict = "dynamic")
+part_a <- combined[seq_along(a)]
+part_b <- combined[length(a) + seq_along(b)]
+stopifnot(identical(names(part_a[[1]]), names(part_b[[1]])))
+```
+
+`unknown` has no effect in dynamic mode because every extracted motif is
+included. It never permits uncertain structures. Empty input returns
+[`list()`](https://rdrr.io/r/base/list.html). An all-NA batch has an
+empty dictionary and returns one named zero-length integer vector per
+input; keep the original missingness mask because zero dimensions cannot
+represent NA. Missing entries in a mixed batch have all-NA vectors with
+that batch’s full dictionary. `na_action = "error"` rejects missing
+inputs in either mode. Dynamic mode does not change the bundled
+dictionary or later fixed calls.
+
+## Circular and residue-pair fingerprints
+
+[`fp_circular_binary()`](https://glycoverse.github.io/glyfp/reference/fp_circular_binary.md),
+[`fp_circular_count()`](https://glycoverse.github.io/glyfp/reference/fp_circular_binary.md)
+and
+[`fp_residue_pair()`](https://glycoverse.github.io/glyfp/reference/fp_residue_pair.md)
+offer fixed-size, dictionary-free representations computed entirely in
+R. They need neither model weights nor a torch runtime. All default to
+`n_bits = 2048`. Use
+[`fp_circular_count()`](https://glycoverse.github.io/glyfp/reference/fp_circular_binary.md)
+for circular occurrence counts, or `mode = "count"` with
+[`fp_residue_pair()`](https://glycoverse.github.io/glyfp/reference/fp_residue_pair.md).
+Inputs undergo the same complete-structure checks as motif methods.
+These methods retain the specified reducing-end state; they do not apply
+the embedding models’ root projection.
+
+``` r
+
+x <- c("Gal(b1-4)GlcNAc(b1-", "Gal(b1-3)GlcNAc(b1-", NA_character_)
+circular <- fp_circular_binary(x)
+pairs <- fp_residue_pair(x)
+stopifnot(identical(fp_circular_binary(x[1]), circular[1]))
+stopifnot(identical(fp_residue_pair(rev(x)), rev(pairs)))
+lengths(circular)
+#> [1] 2048 2048 2048
+```
+
+### Encoding rules
+
+Circular encoding starts with each concrete residue label and its
+represented stereochemistry, positioned substituents, its own
+anomer/donor carbon, and a reducing-end flag. The root retains its
+explicit alpha/beta state. Each Weisfeiler-Lehman (WL) round combines
+the previous label with a sorted multiset of neighbor messages: the
+neighbor label, full glycosidic linkage, and whether the center acts as
+donor or acceptor. The default `radius = 2` records one feature per
+residue at each radius 0, 1 and 2. Repeated environments count
+repeatedly; radii are distinguished, even for single residues.
+Consequently count vectors sum to `number_of_residues * (radius + 1)`.
+
+Residue-pair encoding uses the same WL construction, with default
+`radius = 1` for each endpoint. Only the final endpoint radius is used.
+Each distinct unordered pair contributes a feature consisting of its
+sorted endpoint labels and undirected shortest glycosidic-edge distance.
+All distances are included. This is graph distance, not 3D distance.
+Count vectors sum to `n * (n - 1) / 2`. No self-pairs are included, so
+**all single-residue glycans have an all-zero residue-pair
+fingerprint**; circular or motif features can distinguish them.
+
+``` r
+
+vapply(fp_circular_count(x[1:2]), sum, 0)
+#> [1] 6 6
+vapply(fp_residue_pair(x[1:2], mode = "count"), sum, 0)
+#> [1] 1 1
+```
+
+Encoding version 1 packs fields as byte-length-prefixed UTF-8 strings,
+uses SHA-256 for WL labels and method-specific features, and reduces the
+first 32 bits of the final hash (big-endian) modulo `n_bits`. This
+avoids R serialization, random seeds and batch dictionaries. A bin
+accumulates every occurrence mapped to it; binary mode thresholds the
+final counts. **Different features can collide.** For example,
+`n_bits = 1` maps every feature to the same bin. Increasing the vector
+length reduces folding collisions without recovering structural
+information omitted by the feature definition. Bin names record the
+method, version, radius, dimension and mode. Compare outputs only with
+the same settings and compatible package/dependency versions. Fixed
+hashing does not make fingerprints reversible or unique identifiers for
+glycans.
+
+The bounded `radius` range is 0–10 and `n_bits` is 1–1,048,576. Radius
+counts graph edges, not the ECFP diameter convention. Circular
+environments can miss layout beyond their radius. Pair features add
+distances but omit the interior sequence of residues and linkage labels
+beyond their endpoint environments. With `radius = 0`, acceptor linkage
+positions are omitted by pair features. Absolute stereochemistry not
+represented in glyrepr labels is not reconstructed. Pair enumeration and
+its distance matrix require quadratic space in glycan size. Empty inputs
+return [`list()`](https://rdrr.io/r/base/list.html); missing inputs
+retain all `n_bits` entries as NA.
+
+These are residue-level designs inspired by [extended-connectivity
+fingerprints](https://doi.org/10.1021/ci100050t), [WL graph
+kernels](https://www.jmlr.org/papers/v12/shervashidze11a.html) and
+[atom-pair features](https://doi.org/10.1021/ci00046a002), not exact
+atom-level ECFP, atom-pair or MAP4 implementations. Circular counts
+include every center at every radius; they do not deduplicate repeated
+subgraphs across radii.
+
+### Controlled comparison with motif features
+
+The following small panel checks specific distinctions and failures. It
+is not a prediction benchmark or a claim of general superiority.
+Synthetic Gal/Man chains are used to control local motif content while
+changing longer-range layout; they are not asserted to be naturally
+occurring glycans. Motif counts use one dynamic dictionary per pair so
+coverage gaps in glydb do not confound the comparison. Hashed methods
+use count mode and their default radii and 2,048 bins. Results could
+change with these settings or folding collisions.
+
+``` r
+
+chain <- function(sequence) {
+  residues <- ifelse(strsplit(sequence, "", fixed = TRUE)[[1]] == "G", "Gal", "Man")
+  paste0(paste(residues, collapse = "(b1-4)"), "(b1-")
+}
+panel <- list(
+  linkage = c("Gal(b1-3)GlcNAc(b1-", "Gal(b1-4)GlcNAc(b1-"),
+  branches = c("Gal(b1-3)[GlcNAc(b1-6)]GalNAc(a1-",
+               "Gal(b1-6)[GlcNAc(b1-3)]GalNAc(a1-"),
+  reducing_end = c("Gal(b1-4)GlcNAc(a1-", "Gal(b1-4)GlcNAc(b1-"),
+  single_residue = c("Gal(b1-", "Man(b1-"),
+  chain_8 = vapply(c("GGGMGGGG", "GGGGMGGG"), chain, ""),
+  chain_20 = vapply(c("GGGGGGMGGGGGGGGGGGGG", "GGGGGGGMGGGGGGGGGGGG"), chain, "")
+)
+distinguishes <- function(x, encode) {
+  values <- encode(x)
+  !identical(values[[1]], values[[2]])
+}
+comparison <- data.frame(
+  case = names(panel),
+  motif_1_to_3 = vapply(panel, distinguishes, TRUE,
+    encode = function(x) fp_motif_count(x, motif_dict = "dynamic")),
+  circular_r2 = vapply(panel, distinguishes, TRUE,
+    encode = function(x) fp_circular_count(x)),
+  residue_pair_r1 = vapply(panel, distinguishes, TRUE,
+    encode = function(x) fp_residue_pair(x, mode = "count"))
+)
+knitr::kable(comparison, row.names = FALSE)
+```
+
+| case           | motif_1_to_3 | circular_r2 | residue_pair_r1 |
+|:---------------|:-------------|:------------|:----------------|
+| linkage        | TRUE         | TRUE        | TRUE            |
+| branches       | TRUE         | TRUE        | TRUE            |
+| reducing_end   | TRUE         | TRUE        | TRUE            |
+| single_residue | TRUE         | TRUE        | FALSE           |
+| chain_8        | FALSE        | TRUE        | TRUE            |
+| chain_20       | FALSE        | FALSE       | TRUE            |
+
+The 8-residue chains share the same counts of 1–3-residue motifs but
+differ in both hashed representations. The 20-residue chains also share
+the same local circular fingerprint at radius 2; endpoint distances
+separate this pair. In contrast, single-residue identity is lost
+entirely by the pair representation. These examples motivate combining
+complementary features when appropriate, while showing why no one of
+these representations guarantees structural identity.
+
+## Pretrained embeddings
+
+All embedding methods use optional R torch on the CPU. Binary/count
+methods do not load torch or require a model runtime. Install the
+optional dependencies and runtime explicitly once; glyfp never installs
+them automatically:
+
+``` r
+
+install.packages(c("torch", "digest", "zip"))
+torch::install_torch()
+```
+
+Input validation still requires a known reducing-end alpha/beta state.
+The pretrained models do not encode that state, so **only after
+validation** glyfp projects it out at the normal reducing carbon.
+Consequently, glycans differing only in reducing-end alpha/beta have
+identical embeddings but distinct motif fingerprints where the
+corresponding motifs are in the dictionary. Other reducing-end positions
+or unsupported chemistry produce errors. No other unknown structure is
+accepted or silently completed.
+
+Under the same model, checkpoint, preprocessing and runtime settings,
+duplicate glycans, input order and batch size do not affect coordinates.
+CPU evaluation uses float32, frozen normalization, no dropout or
+gradients, and one graph per forward pass. Save the method, checkpoint
+identity and package/runtime versions with the resulting vectors.
+Different model versions define different spaces, even when lengths and
+coordinate names match. Cross-platform comparisons should allow
+floating-point tolerance; reference tests bound every coordinate’s
+absolute error by `1e-5`. All-NA inputs retain the model’s full
+coordinate set.
+
+### SweetNet
+
+[SweetNet (2021)](https://doi.org/10.1016/j.celrep.2021.109251) is a
+graph neural network over residues and linkages.
+[`fp_sweetnet()`](https://glycoverse.github.io/glyfp/reference/fp_sweetnet.md)
+defaults to v2 and returns 128 coordinates from `bn2(lin2(...))`, before
+final activation, dropout and classification.
+
+**No environment variable or manual download is required for SweetNet.**
+On first use, glyfp downloads the pinned official checkpoint, verifies
+SHA-256 and saves it in `tools::R_user_dir("glyfp", "cache")`.
+Subsequent calls verify and reuse it.
+
+``` r
+
+a <- c("Gal(b1-4)GlcNAc(b1-", "GlcNAc(b1-", NA_character_)
+fp <- fp_sweetnet(a)
+lengths(fp)
+offline <- fp_sweetnet(a, download = FALSE)
+stopifnot(identical(fp, offline))
+legacy <- fp_sweetnet(a, checkpoint = "sweetnet-v1")
+```
+
+| Checkpoint | Model |
+|----|----|
+| `"sweetnet-v2"` (default; about 3.82 MB) | Residual graph layers with BatchNorm; mean and max pooling |
+| `"sweetnet-v1"` | Legacy glycowork 1.9.0 species model; three graph layers and mean pooling |
+| Local `.pt` path | Either supported official artifact, identified by its hash |
+
+Both versions return 128 coordinates, but their values must not be
+mixed. The v2 default follows the current upstream model, not a claim of
+better accuracy for every task. `cache_dir` changes the cache location;
+`download = FALSE` prevents network access and errors on an offline
+cache miss. A local file is never replaced or copied to a persistent
+cache:
+
+``` r
+
+fp <- fp_sweetnet(a,
+  checkpoint = "/path/to/glycowork_sweetnet_species_v2.pt", download = FALSE)
+```
+
+Downloads use a temporary file, SHA-256 validation and atomic rename.
+Corrupt cache entries produce an error naming the file; remove that
+entry to permit a fresh download or supply a verified local file. Failed
+downloads leave no partial checkpoint to be mistaken for valid weights.
+Loading glyfp or using motif methods makes no network request. Original
+checkpoint files are never modified; legacy CUDA tags are relocated in a
+temporary CPU copy.
+
+Supported MIT-licensed official artifacts:
+
+- [SweetNet
+  v2](https://huggingface.co/DBojar/glycowork_models/blob/52187c054b9c988ddb2a5a5af9ee64b51004fd1e/glycowork_sweetnet_species_v2.pt),
+  SHA-256
+  `bc3d901e4284554c1a245b8e6b7e291a5631c8932ca9c27eb8668b6d4424a146`.
+- [Legacy
+  SweetNet](https://huggingface.co/DBojar/glycowork_models/blob/0a3981df888532e52b4c2d910bfb56b5a45ad955/glycowork_sweetnet_species.pt),
+  SHA-256
+  `4ee19fc0593db0562c16585b556050694144816754750ebfe1876ed21ba0f4be`.
+
+Every residue/substituent/linkage token must be in the fixed vocabulary.
+Embedding functions always reject unknown tokens; no untrained token is
+used. The configurable `unknown` argument belongs only to motif
+functions.
+
+### GlycanGT
+
+[GlycanGT](https://doi.org/10.1093/bioinformatics/btag147) uses residue
+and linkage tokens in a graph Transformer. The supported large model
+trained with 35% node-and-edge masking returns its final 768-dimensional
+graph token.
+
+**Download its checkpoint yourself and supply a local path. glyfp never
+downloads GlycanGT weights.** Obtain access under the conditions of the
+[official model
+repository](https://huggingface.co/Akikitani295/GlycanGT), then download
+`outputs/mask_35/pretrained_tokengt_large_multitask_mask_35_final.pt`
+(about 367 MB). The upstream project declares Apache-2.0; model access
+has a separate step. Do not put account credentials into R code.
+
+``` r
+
+fp <- fp_glycangt(
+  c("Gal(b1-4)GlcNAc(b1-", "Man(a1-3)[Man(a1-6)]Man(a1-"),
+  checkpoint = "/path/to/pretrained_tokengt_large_multitask_mask_35_final.pt")
+lengths(fp) # 768 768
+```
+
+The supported Hugging Face revision is
+`7c9f4a19b366ca48ed03995a0ad47fa1e745f24c`, SHA-256
+`d490d18795ee6d4746b9b4abd0a5c733d8f7e4261998d050c1b741b65e530a54`. Code
+follows [the fixed official
+implementation](https://github.com/matsui-lab/GlycanGT/tree/96611518c971deb89215ca163deaf9de3a59fa32).
+Omitting the local checkpoint or supplying a URL produces an error.
+[`fp_glycangt()`](https://glycoverse.github.io/glyfp/reference/fp_glycangt.md)
+has no `download` or `cache_dir` argument. Every call hashes the
+original file, even with tensors cached in memory. CUDA tags are
+relocated in a temporary CPU copy without changing the original file.
+
+The official model generates orthogonal random node identifiers even in
+[`eval()`](https://rdrr.io/r/base/eval.html). glyfp fixes one draw per
+canonical **projected** glycan: master seed 1729 plus a SHA-256-derived
+graph seed, the original single-graph Gaussian QR construction, and
+padding/truncation to width 64. Reducing-end alpha/beta is omitted
+before canonicalization and seed construction. Caller R and CPU torch
+RNG states are preserved. Upstream multi-graph batches use their maximum
+node count and may give different identifiers and outputs. This
+deterministic policy is not a claim to reproduce the paper’s downstream
+benchmark performance.
+
+At least two residues and tokens in the fixed vocabulary are required;
+the upstream edge-triple pipeline does not retain edge-free graphs. Real
+pretrained reference comparisons cover 12 glycans and every coordinate
+under the same single-graph identifier policy, not the upstream
+stochastic multi-graph policy.
+
+### GIFFLAR
+
+[GIFFLAR](https://arxiv.org/abs/2409.13467) combines atoms, bonds and
+residues through heterogeneous message passing. The R implementation
+follows the pinned [glycowork network and graph
+builder](https://github.com/BojarLab/glycowork/tree/199efdde6bc137dbbcd900f84f927fdbbca52eae).
+It concatenates three independent means into 384 coordinates, not the
+1,076 classification scores. No Python, RDKit or GlyLES runtime is
+needed.
+
+On first use,
+[`fp_gifflar()`](https://glycoverse.github.io/glyfp/reference/fp_gifflar.md)
+downloads `glycowork_gifflar_species.pt` (about 7.8 MB) from the
+[official fixed
+revision](https://huggingface.co/DBojar/glycowork_models/tree/52187c054b9c988ddb2a5a5af9ee64b51004fd1e).
+The code and model card declare MIT licensing. Downloads are verified
+before caching. SHA-256:
+`0dab7c3b61aad95dab37d4974da4b57b3fd985128dc09ad5da846e82adb9519d`.
+Every call verifies it, including when tensors are already cached in
+memory. `checkpoint = "gifflar-species"` is the default. Use `cache_dir`
+to change the cache location and `download = FALSE` for offline use.
+Verified local paths are also accepted. Failed downloads leave no
+partial checkpoint; corrupt caches raise an error without being
+overwritten.
+
+``` r
+
+fp <- fp_gifflar(c("GlcNAc(b1-", "Gal6S(b1-4)GlcNAc(b1-", NA_character_),
+  checkpoint = "/path/to/glycowork_gifflar_species.pt")
+lengths(fp) # 384 384 384
+```
+
+The native graph builder supports 27 fixed residue labels:
+
+| Group | Residues |
+|:---|:---|
+| Unmodified | Glc, Gal, Man, Fuc, Xyl, Rha, Rib, Ara |
+| Amino and N-acetyl | GlcN, GalN, GlcNAc, GalNAc, ManNAc |
+| Uronic and sialic acids | GlcA, GalA, IdoA, Neu5Ac, Neu5Gc, Kdn |
+| Positioned sulfates | Gal6S, GlcNAc6S, GlcNAc3S, GalNAc4S, GalNAc6S, IdoA2S |
+| Positioned phosphates | Glc6P, Man6P |
+
+Monosaccharides are supported. Other templates, anomeric-to-anomeric
+bonds and attachments that would move or extend a modification are
+rejected. For example, a child attached at position 2 of GlcN or
+position 6 of Glc6P is unsupported. There is no approximate molecular
+fallback. For short ambiguous text, use an explicit complete
+serialization such as `Ara(a1-` or an ecosystem parser.
+
+The molecular graph retains official atom/chirality features, bond
+ownership, ring relations and both directions of linkage features. Bond
+order and charge are not separate input features in the official
+network. Atom, bond and residue means are pooled separately. No random
+identifiers are used. Graphs and real pretrained predictions have been
+checked against pinned upstream code on 86 structures covering every
+supported template and both linkage anomers.
+
+## Validation
+
+Normal tests do not require network access. Small untrained networks
+validate ported operators independently of checkpoint access; they are
+not pretrained models. Real integration tests additionally use locally
+supplied files through developer-only variables `GLYFP_TEST_CHECKPOINT`,
+`GLYFP_TEST_V2_CHECKPOINT`, `GLYFP_TEST_GLYCANGT_CHECKPOINT` and
+`GLYFP_TEST_GIFFLAR_CHECKPOINT`. These tests cover numerical references,
+explicit complete input followed by the documented root projection,
+independent batches, duplicates, object/text equivalence, missingness,
+RNG preservation and unchanged original weight files.

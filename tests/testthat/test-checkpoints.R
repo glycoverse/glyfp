@@ -25,7 +25,10 @@ test_that("named checkpoints download once and publish only verified files", {
       url,
       "https://huggingface.co/DBojar/glycowork_models/resolve/fixed-revision/weights.pt"
     )
-    expect_identical(dirname(destfile), fake$dir)
+    expect_identical(
+      normalizePath(dirname(destfile), winslash = "/", mustWork = TRUE),
+      normalizePath(fake$dir, winslash = "/", mustWork = TRUE)
+    )
     expect_false(file.exists(file.path(
       fake$dir,
       paste0("sweetnet-v2-", fake$hash, ".pt")

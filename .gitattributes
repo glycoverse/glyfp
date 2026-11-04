@@ -6,3 +6,6 @@
 /tests/testthat/fixtures/glycangt-reference.csv text eol=lf
 
 /inst/extdata/gifflar-templates.tsv text eol=lf
+
+# Preserve the bytes recorded in the dictionary provenance checksum.
+/inst/extdata/motif-dictionary.tsv text eol=lf
